@@ -1,63 +1,99 @@
 import Link from "next/link";
 import { appConfig } from "@/lib/config";
 
-const gamePieces = [
-  { row: 1, col: 2, color: "emerald", label: "Enterprise SaaS", type: "playing" },
-  { row: 2, col: 5, color: "emerald", label: "API Platform", type: "playing" },
-  { row: 4, col: 3, color: "emerald", label: "Data Pipeline", type: "playing" },
-  { row: 3, col: 6, color: "amber", label: "Consumer Mobile", type: "considering" },
-  { row: 5, col: 1, color: "amber", label: "Marketplace", type: "considering" },
-  { row: 5, col: 5, color: "red", label: "Legacy Support", type: "exit" },
-];
+const ACCENT = "#a070e0";
 
-function GamePiece({ color, label }: { color: string; label: string }) {
-  const colorMap: Record<string, string> = {
-    emerald: "bg-emerald-500 shadow-emerald-500/40",
-    amber: "bg-amber-500 shadow-amber-500/40",
-    red: "bg-red-500 shadow-red-500/40",
-  };
+function StarMark({ size = 96 }: { size?: number }) {
+  // 8-point lodestar with radiating rays
+  const center = size / 2;
+  const longArm = size * 0.46;
+  const shortArm = size * 0.16;
+  const rayOuter = size * 0.5;
+  const rayInner = size * 0.36;
+
+  // 8 cardinal/diagonal star points
+  const points: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    const angle = (i * Math.PI) / 4;
+    const r = i % 2 === 0 ? longArm : shortArm;
+    points.push(`${center + r * Math.cos(angle - Math.PI / 2)},${center + r * Math.sin(angle - Math.PI / 2)}`);
+  }
+
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div
-        className={`h-6 w-6 sm:h-8 sm:w-8 rounded-full ${colorMap[color]} shadow-lg`}
-      />
-      <span className="text-[9px] sm:text-[10px] text-slate-500 font-mono leading-tight text-center">
-        {label}
-      </span>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+      {/* Faint outer rays */}
+      {Array.from({ length: 16 }).map((_, i) => {
+        const angle = (i * Math.PI) / 8 - Math.PI / 2;
+        const x1 = center + rayInner * Math.cos(angle);
+        const y1 = center + rayInner * Math.sin(angle);
+        const x2 = center + rayOuter * Math.cos(angle);
+        const y2 = center + rayOuter * Math.sin(angle);
+        return (
+          <line
+            key={i}
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke={ACCENT}
+            strokeWidth={0.5}
+            opacity={0.4}
+          />
+        );
+      })}
+      {/* Star body */}
+      <polygon points={points.join(" ")} fill={ACCENT} fillOpacity={0.18} stroke={ACCENT} strokeWidth={1} />
+      {/* Inner dot */}
+      <circle cx={center} cy={center} r={2.5} fill={ACCENT} />
+    </svg>
+  );
+}
+
+function CheckRow({ label, detail }: { label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 py-2.5 border-b border-white/5 last:border-0">
+      <svg viewBox="0 0 20 20" className="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" stroke={ACCENT} strokeWidth={2}>
+        <path d="M4 10l4 4 8-8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-slate-200">{label}</p>
+        <p className="text-xs text-slate-500 font-mono mt-0.5">{detail}</p>
+      </div>
     </div>
   );
 }
 
 export default function LandingPage() {
-  const boardSize = 6;
-
   return (
-    <div className="flex min-h-screen flex-col bg-[#0f172a]">
-      {/* Thin emerald line at top */}
-      <div className="h-[2px] w-full bg-emerald-500" />
+    <div className="flex min-h-screen flex-col bg-[#0a0612] text-slate-200">
+      {/* Thin accent line */}
+      <div className="h-[2px] w-full" style={{ backgroundColor: ACCENT }} />
 
       {/* Nav */}
       <header className="border-b border-white/5">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-emerald-500/20 border border-emerald-500/40">
-              {/* Chess knight SVG */}
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-emerald-400" fill="currentColor">
-                <path d="M19 22H5v-2h14v2M13 2c-1.25 0-2.42.62-3.11 1.66L7 8l2 2 2.1-2.4a1 1 0 011.46-.04l.2.22c.16.2.24.46.2.72L12.5 14H9v2h6l.5-7.03c.07-.98-.26-1.95-.92-2.7L14 5.5l1.5-1.5H18V2h-5z" />
-              </svg>
-            </div>
-            <span className="font-semibold text-sm text-white tracking-wide">{appConfig.name}</span>
-          </div>
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm text-slate-500 hover:text-slate-300 transition-colors"
-            >
+            <div className="relative">
+              <StarMark size={28} />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-serif text-base text-white tracking-wide">{appConfig.name}</span>
+              <span className="hidden sm:inline text-[10px] font-mono text-slate-600 uppercase tracking-widest">
+                Toronto
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="hidden sm:inline text-[10px] font-mono text-slate-600 uppercase tracking-widest">
+              lodestar.ca
+            </span>
+            <Link href="/login" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
               Sign in
             </Link>
             <Link
               href="/signup"
-              className="text-sm text-emerald-400 border border-emerald-500/40 rounded px-3 py-1.5 hover:bg-emerald-500/10 transition-colors"
+              className="text-sm border rounded px-3 py-1.5 transition-colors hover:bg-white/5"
+              style={{ borderColor: `${ACCENT}55`, color: ACCENT }}
             >
               Get started
             </Link>
@@ -66,134 +102,205 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="mx-auto max-w-5xl px-4 pt-24 pb-20 text-center">
-        <h1 className="text-5xl sm:text-7xl font-bold text-white tracking-tight leading-[1.05]">
-          Every move is a game.
+      <section className="mx-auto max-w-5xl px-4 pt-20 pb-16 text-center">
+        <div className="flex justify-center mb-8">
+          <StarMark size={96} />
+        </div>
+        <h1
+          className="font-serif text-6xl sm:text-8xl text-white tracking-tight leading-[1.0]"
+          style={{ fontFamily: 'ui-serif, Georgia, serif' }}
+        >
+          Lodestar
         </h1>
-        <p className="mt-4 text-2xl sm:text-3xl font-medium text-emerald-400 tracking-tight">
-          Most play the wrong one.
+        <p className="mt-6 text-xl sm:text-2xl text-slate-300 font-serif italic max-w-2xl mx-auto leading-snug">
+          Formal proofs of correctness for agent outputs.
         </p>
-        <p className="mt-6 text-lg text-slate-500">
-          Finite Infinite helps you choose.
+        <p className="mt-6 text-sm font-mono text-slate-500 tracking-wide">
+          From Toronto — where formal methods meet deep learning.
         </p>
       </section>
 
-      {/* The Game Board */}
-      <section className="mx-auto max-w-3xl px-4 pb-20">
-        <div className="relative">
-          {/* Board grid */}
-          <div
-            className="grid border border-white/10 rounded-lg overflow-hidden"
-            style={{ gridTemplateColumns: `repeat(${boardSize}, 1fr)` }}
-          >
-            {Array.from({ length: boardSize * boardSize }).map((_, i) => {
-              const row = Math.floor(i / boardSize);
-              const col = i % boardSize;
-              const isDark = (row + col) % 2 === 0;
-              const piece = gamePieces.find((p) => p.row === row && p.col === col);
+      {/* Problem statement */}
+      <section className="mx-auto max-w-3xl px-4 pb-16 text-center">
+        <p className="text-xs font-mono uppercase tracking-[0.3em] text-slate-600 mb-3">
+          The problem
+        </p>
+        <p className="text-2xl font-serif text-white leading-snug">
+          Agent code ships without proof it works.
+        </p>
+      </section>
 
-              return (
-                <div
-                  key={i}
-                  className={`aspect-square flex items-center justify-center ${
-                    isDark ? "bg-[#0f172a]" : "bg-[#1e293b]"
-                  } border border-white/[0.04]`}
-                >
-                  {piece && <GamePiece color={piece.color} label={piece.label} />}
-                </div>
-              );
-            })}
+      {/* Proof verification panel */}
+      <section className="mx-auto max-w-3xl w-full px-4 pb-16">
+        <div className="rounded-lg border border-white/10 bg-[#120a1e] overflow-hidden shadow-2xl">
+          {/* Title bar */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-black/30">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: ACCENT }} />
+              <span className="text-xs font-mono text-slate-400 uppercase tracking-widest">
+                Proof Verification
+              </span>
+            </div>
+            <span className="text-xs font-mono text-slate-600">lodestar v0.4.1</span>
           </div>
 
-          {/* Board legend */}
-          <div className="mt-6 flex items-center justify-center gap-8 text-xs text-slate-500">
-            <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-emerald-500" />
-              <span>Games you&apos;re playing</span>
+          <div className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-mono text-slate-400">PR #4521</p>
+                <p className="text-base text-white font-medium">Refactor auth middleware</p>
+              </div>
+              <span
+                className="text-[10px] font-mono px-2 py-1 rounded uppercase tracking-widest"
+                style={{ backgroundColor: `${ACCENT}22`, color: ACCENT, border: `1px solid ${ACCENT}44` }}
+              >
+                Verifying
+              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-amber-500" />
-              <span>Games you&apos;re considering</span>
+
+            <div className="rounded border border-white/5 bg-black/20 px-4 py-2">
+              <CheckRow label="State machine" detail="Lean 4 proof attached" />
+              <CheckRow label="API contract" detail="conforms to openapi.yaml" />
+              <CheckRow label="Memory safety" detail="no leaks across 12 paths" />
             </div>
-            <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-red-500" />
-              <span>Games to exit</span>
+
+            {/* Result line */}
+            <div
+              className="mt-5 rounded border px-4 py-3 flex items-center justify-between"
+              style={{ borderColor: `${ACCENT}55`, backgroundColor: `${ACCENT}11` }}
+            >
+              <span className="text-xs font-mono text-slate-400 uppercase tracking-widest">Result</span>
+              <span className="text-sm font-mono font-bold tracking-wider" style={{ color: ACCENT }}>
+                PROVEN CORRECT
+              </span>
             </div>
+          </div>
+        </div>
+
+        {/* Secondary panel: a refusal case */}
+        <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.03] px-5 py-4 flex items-start gap-3">
+          <svg viewBox="0 0 20 20" className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-400" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path d="M10 6v4M10 14h.01M10 1.5L1 17h18L10 1.5z" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-xs font-mono uppercase tracking-widest text-amber-400 mb-1">
+              UNVERIFIABLE
+            </p>
+            <p className="text-sm text-slate-300 font-mono">cannot prove path-X (timeout branch under network partition)</p>
+            <p className="text-xs text-slate-500 mt-1.5">Lodestar refuses to sign what it cannot prove. We tell you what we don&apos;t know.</p>
           </div>
         </div>
       </section>
 
-      {/* Finite vs Infinite */}
+      {/* Honest vs hallucinated */}
       <section className="border-t border-white/5">
-        <div className="mx-auto max-w-5xl px-4 py-24">
-          <div className="grid md:grid-cols-2 gap-0">
-            {/* Finite */}
-            <div className="pr-8 md:pr-12 pb-12 md:pb-0 md:border-r border-b md:border-b-0 border-emerald-500/30">
-              <h2 className="text-xs font-mono tracking-[0.3em] text-slate-600 uppercase mb-4">
-                Finite Games
-              </h2>
-              <p className="text-2xl font-semibold text-white leading-snug">
-                Clear rules. Defined end.<br />
-                Play to win.
-              </p>
-              <div className="mt-8 space-y-3">
-                {["Product launch", "Fundraise", "Quarter targets"].map((item) => (
-                  <div
-                    key={item}
-                    className="flex items-center gap-3 text-sm text-slate-400"
-                  >
-                    <div className="h-1.5 w-1.5 rounded-full bg-slate-600" />
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Infinite */}
-            <div className="pl-0 md:pl-12 pt-12 md:pt-0">
-              <h2 className="text-xs font-mono tracking-[0.3em] text-slate-600 uppercase mb-4">
-                Infinite Games
-              </h2>
-              <p className="text-2xl font-semibold text-white leading-snug">
-                No end. Keep playing.<br />
-                Play to keep playing.
-              </p>
-              <div className="mt-8 space-y-3">
-                {["Brand", "Culture", "Trust", "Innovation"].map((item) => (
-                  <div
-                    key={item}
-                    className="flex items-center gap-3 text-sm text-slate-400"
-                  >
-                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500/60" />
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Quote */}
-      <section className="border-t border-white/5">
-        <div className="mx-auto max-w-4xl px-4 py-24 text-center">
-          <blockquote className="text-3xl sm:text-4xl font-medium text-white leading-relaxed tracking-tight">
-            &ldquo;The only winning move is choosing the right game.&rdquo;
-          </blockquote>
-          <p className="mt-8 text-sm text-slate-600 font-mono tracking-wide">
-            &mdash; The core principle
+        <div className="mx-auto max-w-5xl px-4 py-20">
+          <p className="text-xs font-mono uppercase tracking-[0.3em] text-slate-600 mb-3 text-center">
+            Confident wrong vs honest
           </p>
+          <h2 className="text-center text-3xl font-serif text-white mb-12">
+            The difference matters in production.
+          </h2>
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Hallucinated */}
+            <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-2 w-2 rounded-full bg-red-500" />
+                <span className="text-xs font-mono uppercase tracking-widest text-red-400">
+                  Other tools
+                </span>
+              </div>
+              <p className="font-serif text-xl text-white mb-3 leading-snug">
+                &ldquo;Looks good to me. Approved.&rdquo;
+              </p>
+              <p className="text-sm text-slate-400 font-mono leading-relaxed">
+                LGTM bot signs off on auth changes. Two weeks later the race condition takes down checkout for 47 minutes.
+              </p>
+              <p className="mt-4 text-xs font-mono text-red-400/80 uppercase tracking-widest">
+                Confident. Wrong.
+              </p>
+            </div>
+
+            {/* Lodestar */}
+            <div className="rounded-lg border p-6" style={{ borderColor: `${ACCENT}33`, backgroundColor: `${ACCENT}08` }}>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: ACCENT }} />
+                <span className="text-xs font-mono uppercase tracking-widest" style={{ color: ACCENT }}>
+                  Lodestar
+                </span>
+              </div>
+              <p className="font-serif text-xl text-white mb-3 leading-snug">
+                &ldquo;Unverifiable: cannot prove path-X.&rdquo;
+              </p>
+              <p className="text-sm text-slate-400 font-mono leading-relaxed">
+                Lodestar proves 14 of 15 paths through the change. It refuses to sign the last one. You investigate. You catch the race before it ships.
+              </p>
+              <p className="mt-4 text-xs font-mono uppercase tracking-widest" style={{ color: ACCENT }}>
+                Honest. Useful.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature row */}
+      <section className="border-t border-white/5">
+        <div className="mx-auto max-w-5xl px-4 py-16">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/5 border border-white/5 rounded-lg overflow-hidden">
+            {[
+              { name: "SymbolicCert", detail: "Cryptographic proof of behavior" },
+              { name: "Lean 4 backend", detail: "Theorem-prover under the hood" },
+              { name: "State machine verification", detail: "All paths, not samples" },
+              { name: "Honest refusal", detail: "No false approvals" },
+            ].map((f) => (
+              <div key={f.name} className="bg-[#0a0612] p-5">
+                <p className="font-mono text-xs uppercase tracking-widest mb-2" style={{ color: ACCENT }}>
+                  {f.name}
+                </p>
+                <p className="text-xs text-slate-500 leading-relaxed">{f.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Stats */}
+      <section className="border-t border-white/5">
+        <div className="mx-auto max-w-5xl px-4 py-20">
+          <div className="grid sm:grid-cols-3 gap-8 text-center">
+            <div>
+              <p className="font-serif text-5xl text-white tabular-nums">91.9%</p>
+              <p className="mt-2 text-xs font-mono uppercase tracking-widest text-slate-500">
+                IMO-ProofBench accuracy
+              </p>
+            </div>
+            <div>
+              <p className="font-serif text-5xl text-white tabular-nums">0%</p>
+              <p className="mt-2 text-xs font-mono uppercase tracking-widest text-slate-500">
+                false-positives
+              </p>
+            </div>
+            <div>
+              <p className="font-serif text-5xl text-white tabular-nums" style={{ color: ACCENT }}>
+                refuses
+              </p>
+              <p className="mt-2 text-xs font-mono uppercase tracking-widest text-slate-500">
+                what it can&apos;t prove
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* CTA */}
       <section className="border-t border-white/5">
-        <div className="mx-auto max-w-5xl px-4 py-24 text-center">
+        <div className="mx-auto max-w-5xl px-4 py-20 text-center">
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 border-2 border-emerald-500 text-emerald-400 rounded px-8 py-4 text-lg font-medium hover:bg-emerald-500/10 transition-colors"
+            className="inline-flex items-center gap-2 border-2 rounded px-8 py-4 text-lg font-medium transition-colors hover:bg-white/5"
+            style={{ borderColor: ACCENT, color: ACCENT }}
           >
-            See your game board
+            Verify your first PR
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
@@ -203,9 +310,22 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-white/5 mt-auto">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 text-xs text-slate-600 font-mono">
-          <span>&copy; {new Date().getFullYear()} {appConfig.name}</span>
-          <span>A 12 Cities venture</span>
+        <div className="mx-auto flex flex-col sm:flex-row gap-3 sm:gap-0 h-auto sm:h-16 max-w-6xl items-center justify-between px-4 py-4 sm:py-0">
+          <div className="flex items-center gap-3 text-xs text-slate-600 font-mono">
+            <span style={{ color: ACCENT }}>{appConfig.name}</span>
+            <span>·</span>
+            <span>Toronto</span>
+            <span>·</span>
+            <span>lodestar.ca</span>
+          </div>
+          <a
+            href="https://abduljaleel.xyz/aletheia/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] font-mono uppercase tracking-widest text-slate-500 hover:text-white border border-white/10 rounded px-3 py-1.5 transition-colors hover:border-white/30"
+          >
+            Part of the Aletheia stack &#8599;
+          </a>
         </div>
       </footer>
     </div>

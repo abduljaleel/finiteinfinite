@@ -1,7 +1,7 @@
 export const appConfig = {
-  name: "Finite Infinite",
-  description: "Choose which games to play. Win the ones that matter.",
-  url: "https://finiteinfinite.ca",
+  name: "Lodestar",
+  description: "Formal proofs of correctness for agent outputs.",
+  url: "https://lodestar.ca",
   navItems: [
     { title: "Dashboard", href: "/dashboard", icon: "dashboard" },
     { title: "Strategy Spaces", href: "/spaces", icon: "compass" },
