@@ -2,332 +2,363 @@ import Link from "next/link";
 import { appConfig } from "@/lib/config";
 
 const ACCENT = "#a070e0";
+const MONO =
+  "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
 
-function StarMark({ size = 96 }: { size?: number }) {
-  // 8-point lodestar with radiating rays
-  const center = size / 2;
-  const longArm = size * 0.46;
-  const shortArm = size * 0.16;
-  const rayOuter = size * 0.5;
-  const rayInner = size * 0.36;
+// ---- Fixed star-field (no Math.random) -----------------------------------
+// Each entry: [left%, top%, sizePx, opacity]
+const STARS: Array<[number, number, number, number]> = [
+  [4, 8, 1, 0.5], [11, 22, 2, 0.35], [7, 41, 1, 0.6], [3, 63, 1, 0.4],
+  [9, 78, 2, 0.3], [14, 91, 1, 0.5], [18, 14, 1, 0.45], [22, 35, 1, 0.3],
+  [16, 55, 1, 0.55], [24, 70, 2, 0.35], [21, 86, 1, 0.4], [29, 6, 1, 0.5],
+  [33, 27, 1, 0.3], [27, 48, 1, 0.45], [31, 64, 1, 0.35], [36, 82, 1, 0.5],
+  [44, 4, 2, 0.3], [41, 19, 1, 0.5], [47, 38, 1, 0.35], [52, 9, 1, 0.45],
+  [56, 25, 1, 0.3], [49, 72, 1, 0.4], [54, 88, 2, 0.3], [61, 15, 1, 0.5],
+  [64, 33, 1, 0.35], [58, 52, 1, 0.45], [66, 67, 1, 0.3], [62, 83, 1, 0.5],
+  [71, 7, 1, 0.4], [76, 23, 2, 0.3], [69, 44, 1, 0.5], [74, 60, 1, 0.35],
+  [78, 79, 1, 0.45], [83, 12, 1, 0.3], [87, 30, 1, 0.5], [81, 49, 2, 0.35],
+  [89, 66, 1, 0.4], [85, 85, 1, 0.3], [93, 20, 1, 0.5], [96, 54, 1, 0.35],
+  [91, 74, 1, 0.45], [97, 90, 2, 0.3],
+];
 
-  // 8 cardinal/diagonal star points
-  const points: string[] = [];
-  for (let i = 0; i < 8; i++) {
-    const angle = (i * Math.PI) / 4;
-    const r = i % 2 === 0 ? longArm : shortArm;
-    points.push(`${center + r * Math.cos(angle - Math.PI / 2)},${center + r * Math.sin(angle - Math.PI / 2)}`);
-  }
+// ---- Constellation nodes placed RADIALLY around the central star --------
+// angleDeg measured clockwise from 12 o'clock; radius is the distance from
+// the star centre (in px on the orbital layer). Each carries a verdict.
+type Verdict = "proven" | "unverifiable";
+const NODES: Array<{
+  label: string;
+  verdict: Verdict;
+  angle: number;
+  radius: number;
+}> = [
+  { label: "state machine", verdict: "proven", angle: -52, radius: 250 },
+  { label: "API contract", verdict: "proven", angle: 58, radius: 270 },
+  { label: "memory safety", verdict: "proven", angle: 158, radius: 255 },
+  { label: "path X", verdict: "unverifiable", angle: -150, radius: 240 },
+];
 
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-      {/* Faint outer rays */}
-      {Array.from({ length: 16 }).map((_, i) => {
-        const angle = (i * Math.PI) / 8 - Math.PI / 2;
-        const x1 = center + rayInner * Math.cos(angle);
-        const y1 = center + rayInner * Math.sin(angle);
-        const x2 = center + rayOuter * Math.cos(angle);
-        const y2 = center + rayOuter * Math.sin(angle);
-        return (
-          <line
-            key={i}
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke={ACCENT}
-            strokeWidth={0.5}
-            opacity={0.4}
-          />
-        );
-      })}
-      {/* Star body */}
-      <polygon points={points.join(" ")} fill={ACCENT} fillOpacity={0.18} stroke={ACCENT} strokeWidth={1} />
-      {/* Inner dot */}
-      <circle cx={center} cy={center} r={2.5} fill={ACCENT} />
-    </svg>
-  );
+// orbital layer is 720x720; centre at (360,360)
+const ORBIT = 720;
+const CX = ORBIT / 2;
+const CY = ORBIT / 2;
+
+function polar(angleDeg: number, radius: number) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: CX + radius * Math.cos(rad), y: CY + radius * Math.sin(rad) };
 }
 
-function CheckRow({ label, detail }: { label: string; detail: string }) {
+function Lodestar({ size = 132 }: { size?: number }) {
+  // 8-pointed star / compass rose with a soft glow
+  const c = size / 2;
+  const RL = size * 0.48; // long points
+  const RS = size * 0.17; // short points
+  const pts: string[] = [];
+  for (let i = 0; i < 16; i++) {
+    const r = i % 2 === 0 ? RL : RS;
+    const a = ((i * 22.5 - 90) * Math.PI) / 180;
+    pts.push(`${c + r * Math.cos(a)},${c + r * Math.sin(a)}`);
+  }
   return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-white/5 last:border-0">
-      <svg viewBox="0 0 20 20" className="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" stroke={ACCENT} strokeWidth={2}>
-        <path d="M4 10l4 4 8-8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-slate-200">{label}</p>
-        <p className="text-xs text-slate-500 font-mono mt-0.5">{detail}</p>
-      </div>
-    </div>
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      aria-hidden="true"
+    >
+      <defs>
+        <radialGradient id="ls-core" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={ACCENT} stopOpacity="0.95" />
+          <stop offset="40%" stopColor={ACCENT} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={ACCENT} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <circle cx={c} cy={c} r={c} fill="url(#ls-core)" />
+      <polygon
+        points={pts.join(" ")}
+        fill={ACCENT}
+        fillOpacity={0.22}
+        stroke={ACCENT}
+        strokeWidth={1}
+        strokeOpacity={0.85}
+      />
+      <circle cx={c} cy={c} r={size * 0.045} fill="#ffffff" />
+      <circle cx={c} cy={c} r={size * 0.09} fill="none" stroke={ACCENT} strokeWidth={1} strokeOpacity={0.6} />
+    </svg>
   );
 }
 
 export default function LandingPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-[#0a0612] text-slate-200">
-      {/* Thin accent line */}
-      <div className="h-[2px] w-full" style={{ backgroundColor: ACCENT }} />
+    <main
+      className="relative min-h-screen overflow-hidden bg-[#06060a] text-slate-300 antialiased"
+      style={{
+        fontFamily:
+          "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
+      }}
+    >
+      {/* ---- STAR-FIELD (fixed coordinates) ---- */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+        {STARS.map(([l, t, s, o], i) => (
+          <span
+            key={i}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: `${l}%`,
+              top: `${t}%`,
+              width: s,
+              height: s,
+              opacity: o,
+            }}
+          />
+        ))}
+      </div>
 
-      {/* Nav */}
-      <header className="border-b border-white/5">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <StarMark size={28} />
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-serif text-base text-white tracking-wide">{appConfig.name}</span>
-              <span className="hidden sm:inline text-[10px] font-mono text-slate-600 uppercase tracking-widest">
-                Toronto
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="hidden sm:inline text-[10px] font-mono text-slate-600 uppercase tracking-widest">
-              lodestar.ca
-            </span>
-            <Link href="/login" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
-              Sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="text-sm border rounded px-3 py-1.5 transition-colors hover:bg-white/5"
-              style={{ borderColor: `${ACCENT}55`, color: ACCENT }}
-            >
-              Get started
-            </Link>
-          </div>
+      {/* ---- thin top auth row, kept sparse ---- */}
+      <header className="relative z-10 flex items-center justify-between px-6 pt-7 sm:px-10">
+        <div className="flex items-center gap-2.5">
+          <Lodestar size={24} />
+          <span
+            className="text-[14px] tracking-[0.16em] text-white"
+            style={{ fontFamily: MONO }}
+          >
+            LODESTAR
+          </span>
+          <span
+            className="hidden text-[10px] uppercase tracking-[0.3em] text-slate-600 sm:inline"
+            style={{ fontFamily: MONO }}
+          >
+            Toronto 🇨🇦
+          </span>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="mx-auto max-w-5xl px-4 pt-20 pb-16 text-center">
-        <div className="flex justify-center mb-8">
-          <StarMark size={96} />
-        </div>
-        <h1
-          className="font-serif text-6xl sm:text-8xl text-white tracking-tight leading-[1.0]"
-          style={{ fontFamily: 'ui-serif, Georgia, serif' }}
+      {/* ============================================================
+          THE CELESTIAL FIELD — everything orbits one bright centre.
+          A fixed-size orbital layer is centred on the page; the star,
+          its rings, the constellation lines, and the verdict nodes are
+          all absolutely placed relative to that single focal point.
+      ============================================================ */}
+      <section className="relative z-10 flex justify-center px-4 pt-6 pb-4">
+        <div
+          className="relative"
+          style={{ width: ORBIT, maxWidth: "100%", height: ORBIT }}
         >
-          Lodestar
-        </h1>
-        <p className="mt-6 text-xl sm:text-2xl text-slate-300 font-serif italic max-w-2xl mx-auto leading-snug">
-          Formal proofs of correctness for agent outputs.
-        </p>
-        <p className="mt-6 text-sm font-mono text-slate-500 tracking-wide">
-          From Toronto — where formal methods meet deep learning.
-        </p>
-      </section>
-
-      {/* Problem statement */}
-      <section className="mx-auto max-w-3xl px-4 pb-16 text-center">
-        <p className="text-xs font-mono uppercase tracking-[0.3em] text-slate-600 mb-3">
-          The problem
-        </p>
-        <p className="text-2xl font-serif text-white leading-snug">
-          Agent code ships without proof it works.
-        </p>
-      </section>
-
-      {/* Proof verification panel */}
-      <section className="mx-auto max-w-3xl w-full px-4 pb-16">
-        <div className="rounded-lg border border-white/10 bg-[#120a1e] overflow-hidden shadow-2xl">
-          {/* Title bar */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-black/30">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: ACCENT }} />
-              <span className="text-xs font-mono text-slate-400 uppercase tracking-widest">
-                Proof Verification
-              </span>
-            </div>
-            <span className="text-xs font-mono text-slate-600">lodestar v0.4.1</span>
-          </div>
-
-          <div className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm font-mono text-slate-400">PR #4521</p>
-                <p className="text-base text-white font-medium">Refactor auth middleware</p>
-              </div>
+          {/* concentric rings emanating from the star */}
+          <div aria-hidden="true" className="absolute inset-0">
+            {[150, 250, 350].map((d) => (
               <span
-                className="text-[10px] font-mono px-2 py-1 rounded uppercase tracking-widest"
-                style={{ backgroundColor: `${ACCENT}22`, color: ACCENT, border: `1px solid ${ACCENT}44` }}
-              >
-                Verifying
-              </span>
-            </div>
-
-            <div className="rounded border border-white/5 bg-black/20 px-4 py-2">
-              <CheckRow label="State machine" detail="Lean 4 proof attached" />
-              <CheckRow label="API contract" detail="conforms to openapi.yaml" />
-              <CheckRow label="Memory safety" detail="no leaks across 12 paths" />
-            </div>
-
-            {/* Result line */}
-            <div
-              className="mt-5 rounded border px-4 py-3 flex items-center justify-between"
-              style={{ borderColor: `${ACCENT}55`, backgroundColor: `${ACCENT}11` }}
-            >
-              <span className="text-xs font-mono text-slate-400 uppercase tracking-widest">Result</span>
-              <span className="text-sm font-mono font-bold tracking-wider" style={{ color: ACCENT }}>
-                PROVEN CORRECT
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Secondary panel: a refusal case */}
-        <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.03] px-5 py-4 flex items-start gap-3">
-          <svg viewBox="0 0 20 20" className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-400" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M10 6v4M10 14h.01M10 1.5L1 17h18L10 1.5z" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <div className="flex-1">
-            <p className="text-xs font-mono uppercase tracking-widest text-amber-400 mb-1">
-              UNVERIFIABLE
-            </p>
-            <p className="text-sm text-slate-300 font-mono">cannot prove path-X (timeout branch under network partition)</p>
-            <p className="text-xs text-slate-500 mt-1.5">Lodestar refuses to sign what it cannot prove. We tell you what we don&apos;t know.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Honest vs hallucinated */}
-      <section className="border-t border-white/5">
-        <div className="mx-auto max-w-5xl px-4 py-20">
-          <p className="text-xs font-mono uppercase tracking-[0.3em] text-slate-600 mb-3 text-center">
-            Confident wrong vs honest
-          </p>
-          <h2 className="text-center text-3xl font-serif text-white mb-12">
-            The difference matters in production.
-          </h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Hallucinated */}
-            <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-2 w-2 rounded-full bg-red-500" />
-                <span className="text-xs font-mono uppercase tracking-widest text-red-400">
-                  Other tools
-                </span>
-              </div>
-              <p className="font-serif text-xl text-white mb-3 leading-snug">
-                &ldquo;Looks good to me. Approved.&rdquo;
-              </p>
-              <p className="text-sm text-slate-400 font-mono leading-relaxed">
-                LGTM bot signs off on auth changes. Two weeks later the race condition takes down checkout for 47 minutes.
-              </p>
-              <p className="mt-4 text-xs font-mono text-red-400/80 uppercase tracking-widest">
-                Confident. Wrong.
-              </p>
-            </div>
-
-            {/* Lodestar */}
-            <div className="rounded-lg border p-6" style={{ borderColor: `${ACCENT}33`, backgroundColor: `${ACCENT}08` }}>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: ACCENT }} />
-                <span className="text-xs font-mono uppercase tracking-widest" style={{ color: ACCENT }}>
-                  Lodestar
-                </span>
-              </div>
-              <p className="font-serif text-xl text-white mb-3 leading-snug">
-                &ldquo;Unverifiable: cannot prove path-X.&rdquo;
-              </p>
-              <p className="text-sm text-slate-400 font-mono leading-relaxed">
-                Lodestar proves 14 of 15 paths through the change. It refuses to sign the last one. You investigate. You catch the race before it ships.
-              </p>
-              <p className="mt-4 text-xs font-mono uppercase tracking-widest" style={{ color: ACCENT }}>
-                Honest. Useful.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Feature row */}
-      <section className="border-t border-white/5">
-        <div className="mx-auto max-w-5xl px-4 py-16">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/5 border border-white/5 rounded-lg overflow-hidden">
-            {[
-              { name: "SymbolicCert", detail: "Cryptographic proof of behavior" },
-              { name: "Lean 4 backend", detail: "Theorem-prover under the hood" },
-              { name: "State machine verification", detail: "All paths, not samples" },
-              { name: "Honest refusal", detail: "No false approvals" },
-            ].map((f) => (
-              <div key={f.name} className="bg-[#0a0612] p-5">
-                <p className="font-mono text-xs uppercase tracking-widest mb-2" style={{ color: ACCENT }}>
-                  {f.name}
-                </p>
-                <p className="text-xs text-slate-500 leading-relaxed">{f.detail}</p>
-              </div>
+                key={d}
+                className="absolute rounded-full border"
+                style={{
+                  left: CX,
+                  top: CY,
+                  width: d * 2,
+                  height: d * 2,
+                  transform: "translate(-50%, -50%)",
+                  borderColor: `${ACCENT}1f`,
+                }}
+              />
             ))}
           </div>
-        </div>
-      </section>
 
-      {/* Stats */}
-      <section className="border-t border-white/5">
-        <div className="mx-auto max-w-5xl px-4 py-20">
-          <div className="grid sm:grid-cols-3 gap-8 text-center">
-            <div>
-              <p className="font-serif text-5xl text-white tabular-nums">91.9%</p>
-              <p className="mt-2 text-xs font-mono uppercase tracking-widest text-slate-500">
-                IMO-ProofBench accuracy
-              </p>
-            </div>
-            <div>
-              <p className="font-serif text-5xl text-white tabular-nums">0%</p>
-              <p className="mt-2 text-xs font-mono uppercase tracking-widest text-slate-500">
-                false-positives
-              </p>
-            </div>
-            <div>
-              <p className="font-serif text-5xl text-white tabular-nums" style={{ color: ACCENT }}>
-                refuses
-              </p>
-              <p className="mt-2 text-xs font-mono uppercase tracking-widest text-slate-500">
-                what it can&apos;t prove
-              </p>
+          {/* constellation lines: SVG from centre to each node */}
+          <svg
+            aria-hidden="true"
+            viewBox={`0 0 ${ORBIT} ${ORBIT}`}
+            className="absolute inset-0 h-full w-full"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {NODES.map((n) => {
+              const p = polar(n.angle, n.radius);
+              const dim = n.verdict === "unverifiable";
+              return (
+                <line
+                  key={n.label}
+                  x1={CX}
+                  y1={CY}
+                  x2={p.x}
+                  y2={p.y}
+                  stroke={dim ? "#8a8f9c" : ACCENT}
+                  strokeWidth={0.75}
+                  strokeOpacity={dim ? 0.3 : 0.45}
+                  strokeDasharray={dim ? "3 4" : undefined}
+                />
+              );
+            })}
+          </svg>
+
+          {/* THE STAR + the short headline that sits around it */}
+          <div
+            className="absolute flex flex-col items-center text-center"
+            style={{
+              left: CX,
+              top: CY,
+              transform: "translate(-50%, -50%)",
+              width: 360,
+              maxWidth: "86vw",
+            }}
+          >
+            <Lodestar size={132} />
+            <h1
+              className="mt-5 text-[24px] leading-[1.25] text-white sm:text-[28px]"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
+              Ships only what is
+              <br />
+              provably correct.
+            </h1>
+            <p className="mt-3 max-w-xs text-[13px] leading-relaxed text-slate-500">
+              Formal proofs of correctness for agent outputs.
+            </p>
+            <div className="mt-5 flex items-center gap-3">
+              <Link
+                href="/login"
+                className="border px-4 py-1.5 text-[12px] tracking-wide transition-colors hover:bg-white/5"
+                style={{ borderColor: "#2a2a3a", color: "#b8b8c8", fontFamily: MONO }}
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/signup"
+                className="border px-4 py-1.5 text-[12px] tracking-wide transition-colors hover:bg-white/5"
+                style={{ borderColor: `${ACCENT}66`, color: ACCENT, fontFamily: MONO }}
+              >
+                Get started
+              </Link>
             </div>
           </div>
+
+          {/* THE VERDICT NODES, radially placed around the star */}
+          {NODES.map((n) => {
+            const p = polar(n.angle, n.radius);
+            const dim = n.verdict === "unverifiable";
+            const onLeft = p.x < CX;
+            return (
+              <div
+                key={n.label}
+                className="absolute"
+                style={{
+                  left: p.x,
+                  top: p.y,
+                  transform: "translate(-50%, -50%)",
+                }}
+              >
+                <div
+                  className="flex items-center gap-2 whitespace-nowrap"
+                  style={{ flexDirection: onLeft ? "row-reverse" : "row" }}
+                >
+                  {/* node dot */}
+                  <span
+                    className="block rounded-full"
+                    style={{
+                      width: 10,
+                      height: 10,
+                      background: dim ? "#0a0a12" : ACCENT,
+                      border: `2px solid ${dim ? "#c79a3f" : ACCENT}`,
+                      boxShadow: dim ? "none" : `0 0 14px ${ACCENT}`,
+                    }}
+                  />
+                  <div style={{ textAlign: onLeft ? "right" : "left" }}>
+                    <div
+                      className="text-[12px] text-white"
+                      style={{ fontFamily: MONO }}
+                    >
+                      {n.label}
+                    </div>
+                    <div
+                      className="text-[10px] uppercase tracking-[0.16em]"
+                      style={{
+                        color: dim ? "#c79a3f" : ACCENT,
+                        fontFamily: MONO,
+                      }}
+                    >
+                      {dim ? "✕ unverifiable" : "✓ proven"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="border-t border-white/5">
-        <div className="mx-auto max-w-5xl px-4 py-20 text-center">
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 border-2 rounded px-8 py-4 text-lg font-medium transition-colors hover:bg-white/5"
-            style={{ borderColor: ACCENT, color: ACCENT }}
-          >
-            Verify your first PR
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </Link>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-white/5 mt-auto">
-        <div className="mx-auto flex flex-col sm:flex-row gap-3 sm:gap-0 h-auto sm:h-16 max-w-6xl items-center justify-between px-4 py-4 sm:py-0">
-          <div className="flex items-center gap-3 text-xs text-slate-600 font-mono">
-            <span style={{ color: ACCENT }}>{appConfig.name}</span>
-            <span>·</span>
-            <span>Toronto</span>
-            <span>·</span>
-            <span>lodestar.ca</span>
+      {/* ============================================================
+          THE HONESTY CONTRAST — one quiet panel, two stacked quotes
+      ============================================================ */}
+      <section className="relative z-10 flex flex-col items-center px-6 pb-10">
+        <div className="w-full max-w-md space-y-4">
+          {/* hallucinated model */}
+          <div className="flex items-start gap-3 opacity-70">
+            <span
+              className="mt-1 text-[13px]"
+              style={{ color: "#d05a5a", fontFamily: MONO }}
+            >
+              ✕
+            </span>
+            <p
+              className="text-[15px] italic text-slate-500 line-through decoration-[#d05a5a]/50"
+              style={{ fontFamily: "Georgia, serif" }}
+            >
+              &ldquo;Looks good, approved!&rdquo;
+            </p>
           </div>
-          <a
-            href="https://abduljaleel.xyz/aletheia/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] font-mono uppercase tracking-widest text-slate-500 hover:text-white border border-white/10 rounded px-3 py-1.5 transition-colors hover:border-white/30"
-          >
-            Part of the Aletheia stack &#8599;
-          </a>
+          {/* lodestar */}
+          <div className="flex items-start gap-3">
+            <span
+              className="mt-1 text-[13px]"
+              style={{ color: ACCENT, fontFamily: MONO }}
+            >
+              ✓
+            </span>
+            <p
+              className="text-[16px] text-white"
+              style={{ fontFamily: "Georgia, serif" }}
+            >
+              &ldquo;I cannot prove path X. Refusing.&rdquo;
+            </p>
+          </div>
+          <p className="pt-1 text-center text-[12px] italic text-slate-600">
+            An honest &lsquo;unverifiable&rsquo; beats a confident &lsquo;verified.&rsquo;
+          </p>
         </div>
+      </section>
+
+      {/* ---- quiet stats line ---- */}
+      <section className="relative z-10 flex justify-center px-6 pb-16">
+        <p
+          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-[11px] uppercase tracking-[0.18em] text-slate-500"
+          style={{ fontFamily: MONO }}
+        >
+          <span style={{ color: ACCENT }}>91.9% IMO-ProofBench</span>
+          <span className="text-slate-700">·</span>
+          <span>0% false-positives</span>
+          <span className="text-slate-700">·</span>
+          <span>refuses what it can&apos;t prove</span>
+        </p>
+      </section>
+
+      {/* ============================================================
+          FOOTER — centred, sparse
+      ============================================================ */}
+      <footer className="relative z-10 flex flex-col items-center gap-2 px-6 pb-10 text-center">
+        <div
+          className="text-[11px] uppercase tracking-[0.22em] text-slate-600"
+          style={{ fontFamily: MONO }}
+        >
+          <span style={{ color: ACCENT }}>{appConfig.name}</span>
+          <span className="mx-2 text-slate-700">·</span>
+          <span>Toronto</span>
+        </div>
+        <a
+          href="https://abduljaleel.xyz/aletheia/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] tracking-[0.12em] text-slate-500 transition-colors hover:text-white"
+          style={{ fontFamily: MONO }}
+        >
+          Part of the Aletheia stack ↗
+        </a>
       </footer>
-    </div>
+    </main>
   );
 }
