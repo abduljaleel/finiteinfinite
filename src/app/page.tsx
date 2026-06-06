@@ -1,12 +1,46 @@
 import Link from "next/link";
 import { appConfig } from "@/lib/config";
 
-const ACCENT = "#a070e0";
+/* ────────────────────────────────────────────────────────────────────────
+   LODESTAR — "THE ASTROLABE" (celestial-navigation concept, elevated)
+   The fixed point of correctness. Agent claims become a constellation of
+   proof obligations; each is discharged (proven) or marked unverifiable and
+   refused. The whole instrument is ONE responsive viewBox SVG so the chart
+   scales as a unit and never breaks apart on small screens.
+   ──────────────────────────────────────────────────────────────────────── */
+
+const VIOLET = "#9b7bef";
+const VIOLET_HI = "#c4b5fd";
+const GOLD = "#e8c266";
+const AMBER = "#d8a24a";
+const WHITE = "#eef1ff";
+const MUTED = "#838aa6";
+const FAINT = "#4a5172";
 const MONO =
   "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
+const SERIF = "'Georgia', 'Times New Roman', serif";
 
-// ---- Fixed star-field (no Math.random) -----------------------------------
-// Each entry: [left%, top%, sizePx, opacity]
+const CSS = `
+@keyframes ls-twinkle { 0%,100% { opacity:.2 } 50% { opacity:.95 } }
+@keyframes ls-pulse {
+  0%,100% { opacity:.5; transform:scale(.9); }
+  50%     { opacity:1;  transform:scale(1.08); }
+}
+@keyframes ls-spin { to { transform: rotate(360deg); } }
+@keyframes ls-drift {
+  0%,100% { transform: translate(-50%,0) scale(1); opacity:.45; }
+  50%     { transform: translate(-47%,-3%) scale(1.1); opacity:.7; }
+}
+@keyframes ls-rise { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+.ls-rise { animation: ls-rise .9s cubic-bezier(.2,.7,.2,1) both; }
+.ls-bezel { transform-box: fill-box; transform-origin: center; animation: ls-spin 120s linear infinite; }
+.ls-core  { transform-box: fill-box; transform-origin: center; animation: ls-pulse 4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ls-twinkle, .ls-bezel, .ls-core, .ls-neb, .ls-rise { animation: none !important; }
+}
+`;
+
+/* Fixed star-field — deterministic (no Math.random ⇒ no hydration drift) */
 const STARS: Array<[number, number, number, number]> = [
   [4, 8, 1, 0.5], [11, 22, 2, 0.35], [7, 41, 1, 0.6], [3, 63, 1, 0.4],
   [9, 78, 2, 0.3], [14, 91, 1, 0.5], [18, 14, 1, 0.45], [22, 35, 1, 0.3],
@@ -21,260 +55,225 @@ const STARS: Array<[number, number, number, number]> = [
   [91, 74, 1, 0.45], [97, 90, 2, 0.3],
 ];
 
-// ---- Constellation nodes placed RADIALLY around the central star --------
-// angleDeg measured clockwise from 12 o'clock; radius is the distance from
-// the star centre (in px on the orbital layer). Each carries a verdict.
+/* The proof constellation — a guiding asterism that points at the lodestar.
+   x/y are in the 600×600 chart space; the proven nodes form the asterism,
+   the lone unverifiable node sits apart, dashed and refused. */
 type Verdict = "proven" | "unverifiable";
-const NODES: Array<{
+interface Node {
+  n: number;
   label: string;
   verdict: Verdict;
-  angle: number;
-  radius: number;
-}> = [
-  { label: "state machine", verdict: "proven", angle: -52, radius: 250 },
-  { label: "API contract", verdict: "proven", angle: 58, radius: 270 },
-  { label: "memory safety", verdict: "proven", angle: 158, radius: 255 },
-  { label: "path X", verdict: "unverifiable", angle: -150, radius: 240 },
-];
-
-// orbital layer is 720x720; centre at (360,360)
-const ORBIT = 720;
-const CX = ORBIT / 2;
-const CY = ORBIT / 2;
-
-function polar(angleDeg: number, radius: number) {
-  const rad = ((angleDeg - 90) * Math.PI) / 180;
-  return { x: CX + radius * Math.cos(rad), y: CY + radius * Math.sin(rad) };
+  x: number;
+  y: number;
 }
+const NODES: Node[] = [
+  { n: 1, label: "state machine", verdict: "proven", x: 438, y: 150 },
+  { n: 2, label: "API contract", verdict: "proven", x: 506, y: 236 },
+  { n: 3, label: "memory safety", verdict: "proven", x: 470, y: 348 },
+  { n: 4, label: "type soundness", verdict: "proven", x: 388, y: 408 },
+  { n: 5, label: "path X", verdict: "unverifiable", x: 150, y: 430 },
+];
+const CX = 300;
+const CY = 300;
+const PROVEN = NODES.filter((d) => d.verdict === "proven");
 
-function Lodestar({ size = 132 }: { size?: number }) {
-  // 8-pointed star / compass rose with a soft glow
-  const c = size / 2;
-  const RL = size * 0.48; // long points
-  const RS = size * 0.17; // short points
+/* 8-point compass star (the lodestar core) centred at (cx,cy) */
+function starPoints(cx: number, cy: number, size: number) {
+  const RL = size * 0.5;
+  const RS = size * 0.17;
   const pts: string[] = [];
   for (let i = 0; i < 16; i++) {
     const r = i % 2 === 0 ? RL : RS;
     const a = ((i * 22.5 - 90) * Math.PI) / 180;
-    pts.push(`${c + r * Math.cos(a)},${c + r * Math.sin(a)}`);
+    pts.push(`${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`);
   }
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      aria-hidden="true"
-    >
-      <defs>
-        <radialGradient id="ls-core" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={ACCENT} stopOpacity="0.95" />
-          <stop offset="40%" stopColor={ACCENT} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={ACCENT} stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <circle cx={c} cy={c} r={c} fill="url(#ls-core)" />
-      <polygon
-        points={pts.join(" ")}
-        fill={ACCENT}
-        fillOpacity={0.22}
-        stroke={ACCENT}
-        strokeWidth={1}
-        strokeOpacity={0.85}
-      />
-      <circle cx={c} cy={c} r={size * 0.045} fill="#ffffff" />
-      <circle cx={c} cy={c} r={size * 0.09} fill="none" stroke={ACCENT} strokeWidth={1} strokeOpacity={0.6} />
-    </svg>
-  );
+  return pts.join(" ");
+}
+
+/* small 4-point sparkle for a constellation node */
+function sparkle(cx: number, cy: number, s: number) {
+  return `${cx},${cy - s} ${cx + s * 0.28},${cy - s * 0.28} ${cx + s},${cy} ${cx + s * 0.28},${cy + s * 0.28} ${cx},${cy + s} ${cx - s * 0.28},${cy + s * 0.28} ${cx - s},${cy} ${cx - s * 0.28},${cy - s * 0.28}`;
 }
 
 export default function LandingPage() {
   return (
     <main
-      className="relative min-h-screen overflow-hidden bg-[#06060a] text-slate-300 antialiased"
+      className="relative min-h-screen overflow-hidden antialiased"
       style={{
+        background:
+          "radial-gradient(140% 120% at 50% -20%, #101935 0%, #0a0f24 38%, #05060f 100%)",
+        color: MUTED,
         fontFamily:
           "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
       }}
     >
-      {/* ---- STAR-FIELD (fixed coordinates) ---- */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+      <style>{CSS}</style>
+
+      {/* ── nebula haze + star-field ── */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div
+          className="ls-neb absolute left-1/2 top-[-10%] h-[60vh] w-[80vw] blur-3xl"
+          style={{
+            background: `radial-gradient(circle at 50% 40%, ${VIOLET}26, transparent 60%)`,
+            animation: "ls-drift 18s ease-in-out infinite",
+          }}
+        />
+        <div
+          className="ls-neb absolute left-[15%] top-[40%] h-[40vh] w-[50vw] blur-3xl"
+          style={{
+            background: `radial-gradient(circle at 50% 50%, ${GOLD}12, transparent 60%)`,
+            animation: "ls-drift 26s ease-in-out infinite",
+          }}
+        />
         {STARS.map(([l, t, s, o], i) => (
           <span
             key={i}
-            className="absolute rounded-full bg-white"
+            className={s >= 2 ? "ls-twinkle absolute rounded-full bg-white" : "absolute rounded-full bg-white"}
             style={{
               left: `${l}%`,
               top: `${t}%`,
               width: s,
               height: s,
               opacity: o,
+              animationDuration: s >= 2 ? `${3 + (i % 4)}s` : undefined,
+              animationDelay: s >= 2 ? `${(i % 5) * 0.6}s` : undefined,
             }}
           />
         ))}
       </div>
 
-      {/* ---- thin top auth row, kept sparse ---- */}
-      <header className="relative z-10 flex items-center justify-between px-6 pt-7 sm:px-10">
+      {/* ── NAV ── */}
+      <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-6 sm:px-10">
         <div className="flex items-center gap-2.5">
-          <Lodestar size={24} />
-          <span
-            className="text-[14px] tracking-[0.16em] text-white"
-            style={{ fontFamily: MONO }}
-          >
+          <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+            <polygon points={starPoints(13, 13, 13)} fill={VIOLET} fillOpacity={0.25} stroke={VIOLET_HI} strokeWidth={1} />
+            <circle cx="13" cy="13" r="1.6" fill="#fff" />
+          </svg>
+          <span className="text-[14px] tracking-[0.18em] text-white" style={{ fontFamily: MONO }}>
             LODESTAR
           </span>
-          <span
-            className="hidden text-[10px] uppercase tracking-[0.3em] text-slate-600 sm:inline"
-            style={{ fontFamily: MONO }}
-          >
-            Toronto 🇨🇦
+          <span className="hidden text-[10px] uppercase tracking-[0.3em] sm:inline" style={{ color: FAINT, fontFamily: MONO }}>
+            Toronto 🇨🇦 · 43.6°N
           </span>
+        </div>
+        <div className="flex items-center gap-4 text-[13px]">
+          <Link href="/login" className="transition-colors hover:text-white" style={{ color: MUTED }}>
+            Sign in
+          </Link>
+          <Link
+            href="/signup"
+            className="rounded-full px-4 py-2 text-[13px] font-medium transition-transform hover:scale-[1.03]"
+            style={{
+              color: "#0a0a16",
+              background: `linear-gradient(180deg, ${VIOLET_HI}, ${VIOLET})`,
+              boxShadow: `0 0 24px ${VIOLET}55`,
+            }}
+          >
+            Get started
+          </Link>
         </div>
       </header>
 
-      {/* ============================================================
-          THE CELESTIAL FIELD — everything orbits one bright centre.
-          A fixed-size orbital layer is centred on the page; the star,
-          its rings, the constellation lines, and the verdict nodes are
-          all absolutely placed relative to that single focal point.
-      ============================================================ */}
-      <section className="relative z-10 flex justify-center px-4 pt-6 pb-4">
-        <div
-          className="relative"
-          style={{ width: ORBIT, maxWidth: "100%", height: ORBIT }}
-        >
-          {/* concentric rings emanating from the star */}
-          <div aria-hidden="true" className="absolute inset-0">
-            {[150, 250, 350].map((d) => (
-              <span
-                key={d}
-                className="absolute rounded-full border"
-                style={{
-                  left: CX,
-                  top: CY,
-                  width: d * 2,
-                  height: d * 2,
-                  transform: "translate(-50%, -50%)",
-                  borderColor: `${ACCENT}1f`,
-                }}
-              />
-            ))}
-          </div>
-
-          {/* constellation lines: SVG from centre to each node */}
-          <svg
-            aria-hidden="true"
-            viewBox={`0 0 ${ORBIT} ${ORBIT}`}
-            className="absolute inset-0 h-full w-full"
-            preserveAspectRatio="xMidYMid meet"
-          >
-            {NODES.map((n) => {
-              const p = polar(n.angle, n.radius);
-              const dim = n.verdict === "unverifiable";
-              return (
-                <line
-                  key={n.label}
-                  x1={CX}
-                  y1={CY}
-                  x2={p.x}
-                  y2={p.y}
-                  stroke={dim ? "#8a8f9c" : ACCENT}
-                  strokeWidth={0.75}
-                  strokeOpacity={dim ? 0.3 : 0.45}
-                  strokeDasharray={dim ? "3 4" : undefined}
-                />
-              );
-            })}
-          </svg>
-
-          {/* THE STAR + the short headline that sits around it */}
+      {/* ── HERO: message + the astrolabe instrument ── */}
+      <section className="relative z-10 mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-6 pt-6 pb-16 sm:px-10 lg:grid-cols-[0.92fr_1.08fr] lg:gap-6 lg:pt-10">
+        {/* message */}
+        <div className="ls-rise text-center lg:text-left">
           <div
-            className="absolute flex flex-col items-center text-center"
-            style={{
-              left: CX,
-              top: CY,
-              transform: "translate(-50%, -50%)",
-              width: 360,
-              maxWidth: "86vw",
-            }}
+            className="mb-6 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em]"
+            style={{ borderColor: `${VIOLET}33`, color: VIOLET_HI, fontFamily: MONO }}
           >
-            <Lodestar size={132} />
-            <h1
-              className="mt-5 text-[24px] leading-[1.25] text-white sm:text-[28px]"
-              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-            >
-              Ships only what is
-              <br />
-              provably correct.
-            </h1>
-            <p className="mt-3 max-w-xs text-[13px] leading-relaxed text-slate-500">
-              Formal proofs of correctness for agent outputs.
-            </p>
-            <div className="mt-5 flex items-center gap-3">
-              <Link
-                href="/login"
-                className="border px-4 py-1.5 text-[12px] tracking-wide transition-colors hover:bg-white/5"
-                style={{ borderColor: "#2a2a3a", color: "#b8b8c8", fontFamily: MONO }}
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/signup"
-                className="border px-4 py-1.5 text-[12px] tracking-wide transition-colors hover:bg-white/5"
-                style={{ borderColor: `${ACCENT}66`, color: ACCENT, fontFamily: MONO }}
-              >
-                Get started
-              </Link>
-            </div>
+            <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: GOLD, boxShadow: `0 0 8px ${GOLD}` }} />
+            Your true north for correctness
           </div>
 
-          {/* THE VERDICT NODES, radially placed around the star */}
-          {NODES.map((n) => {
-            const p = polar(n.angle, n.radius);
-            const dim = n.verdict === "unverifiable";
-            const onLeft = p.x < CX;
+          <h1 className="text-[2.6rem] leading-[1.08] text-white sm:text-[3.3rem]" style={{ fontFamily: SERIF }}>
+            Ships only what is
+            <br />
+            <span
+              style={{
+                background: `linear-gradient(110deg, ${VIOLET_HI}, ${GOLD})`,
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+              }}
+            >
+              provably correct.
+            </span>
+          </h1>
+
+          <p className="mx-auto mt-6 max-w-md text-[15px] leading-relaxed lg:mx-0" style={{ color: MUTED }}>
+            Lodestar generates <span style={{ color: WHITE }}>formal proofs of correctness</span> for
+            agent outputs. Every claim is charted against a proof obligation —
+            discharged, or marked unverifiable and refused.
+          </p>
+
+          <div className="mt-8 flex items-center justify-center gap-3 lg:justify-start">
+            <Link
+              href="/signup"
+              className="rounded-full px-5 py-2.5 text-[13px] font-medium transition-transform hover:scale-[1.03]"
+              style={{ color: "#0a0a16", background: `linear-gradient(180deg, ${VIOLET_HI}, ${VIOLET})`, boxShadow: `0 0 26px ${VIOLET}55` }}
+            >
+              Get started →
+            </Link>
+            <Link
+              href="/login"
+              className="rounded-full border px-5 py-2.5 text-[13px] transition-colors hover:bg-white/5"
+              style={{ borderColor: "#2a2f4a", color: MUTED, fontFamily: MONO }}
+            >
+              Sign in
+            </Link>
+          </div>
+
+          {/* stats */}
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-3 lg:justify-start">
+            <Stat value="91.9%" label="IMO-ProofBench" accent={GOLD} />
+            <Stat value="0%" label="false-positives" accent={VIOLET_HI} />
+            <Stat value="100%" label="refuses if unproven" accent={VIOLET_HI} />
+          </div>
+        </div>
+
+        {/* the instrument */}
+        <div className="ls-rise" style={{ animationDelay: ".12s" }}>
+          <Astrolabe />
+        </div>
+      </section>
+
+      {/* ── CONSTELLATION KEY: the verdict log ── */}
+      <section className="relative z-10 mx-auto max-w-6xl px-6 pb-16 sm:px-10">
+        <Rule>Proof constellation · this run</Rule>
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {NODES.map((d) => {
+            const dim = d.verdict === "unverifiable";
             return (
               <div
-                key={n.label}
-                className="absolute"
+                key={d.n}
+                className="rounded-xl border p-4"
                 style={{
-                  left: p.x,
-                  top: p.y,
-                  transform: "translate(-50%, -50%)",
+                  borderColor: dim ? `${AMBER}30` : `${VIOLET}26`,
+                  background: dim ? `${AMBER}08` : `${VIOLET}0b`,
                 }}
               >
-                <div
-                  className="flex items-center gap-2 whitespace-nowrap"
-                  style={{ flexDirection: onLeft ? "row-reverse" : "row" }}
-                >
-                  {/* node dot */}
+                <div className="flex items-center gap-2">
                   <span
-                    className="block rounded-full"
+                    className="grid h-5 w-5 place-items-center rounded-full text-[10px]"
                     style={{
-                      width: 10,
-                      height: 10,
-                      background: dim ? "#0a0a12" : ACCENT,
-                      border: `2px solid ${dim ? "#c79a3f" : ACCENT}`,
-                      boxShadow: dim ? "none" : `0 0 14px ${ACCENT}`,
+                      color: dim ? AMBER : "#0a0a16",
+                      background: dim ? "transparent" : VIOLET,
+                      border: `1px solid ${dim ? AMBER : VIOLET}`,
+                      fontFamily: MONO,
                     }}
-                  />
-                  <div style={{ textAlign: onLeft ? "right" : "left" }}>
-                    <div
-                      className="text-[12px] text-white"
-                      style={{ fontFamily: MONO }}
-                    >
-                      {n.label}
-                    </div>
-                    <div
-                      className="text-[10px] uppercase tracking-[0.16em]"
-                      style={{
-                        color: dim ? "#c79a3f" : ACCENT,
-                        fontFamily: MONO,
-                      }}
-                    >
-                      {dim ? "✕ unverifiable" : "✓ proven"}
-                    </div>
-                  </div>
+                  >
+                    {d.n}
+                  </span>
+                  <span className="text-[13px] text-white" style={{ fontFamily: MONO }}>
+                    {d.label}
+                  </span>
+                </div>
+                <div
+                  className="mt-3 text-[10px] uppercase tracking-[0.18em]"
+                  style={{ color: dim ? AMBER : VIOLET_HI, fontFamily: MONO }}
+                >
+                  {dim ? "✕ unverifiable" : "✓ proven"}
                 </div>
               </div>
             );
@@ -282,83 +281,263 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ============================================================
-          THE HONESTY CONTRAST — one quiet panel, two stacked quotes
-      ============================================================ */}
-      <section className="relative z-10 flex flex-col items-center px-6 pb-10">
-        <div className="w-full max-w-md space-y-4">
-          {/* hallucinated model */}
-          <div className="flex items-start gap-3 opacity-70">
-            <span
-              className="mt-1 text-[13px]"
-              style={{ color: "#d05a5a", fontFamily: MONO }}
-            >
-              ✕
-            </span>
-            <p
-              className="text-[15px] italic text-slate-500 line-through decoration-[#d05a5a]/50"
-              style={{ fontFamily: "Georgia, serif" }}
-            >
-              &ldquo;Looks good, approved!&rdquo;
-            </p>
+      {/* ── HOW IT NAVIGATES (the concept, as a triad) ── */}
+      <section className="relative z-10 mx-auto max-w-6xl px-6 pb-16 sm:px-10">
+        <Rule>How it reads the sky</Rule>
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Step glyph="✦" title="Chart the course" body="Each claim in the agent's output becomes a formal proof obligation — a fixed star to navigate by." />
+          <Step glyph="◈" title="Verify against proof" body="Every obligation is discharged with a machine-checked proof. Nothing is taken on confidence." />
+          <Step glyph="⊘" title="Refuse the unprovable" body="If a path can't be proven, it's marked unverifiable and never shipped. Silence over a false 'yes.'" />
+        </div>
+      </section>
+
+      {/* ── THE HONESTY CONTRAST ── */}
+      <section className="relative z-10 mx-auto flex max-w-2xl flex-col items-center px-6 pb-20 sm:px-10">
+        <div
+          className="w-full rounded-2xl border px-8 py-10"
+          style={{ borderColor: `${VIOLET}22`, background: "rgba(12,16,34,0.5)" }}
+        >
+          <div className="space-y-5">
+            <div className="flex items-start gap-3 opacity-70">
+              <span className="mt-1 text-[13px]" style={{ color: "#d05a5a", fontFamily: MONO }}>✕</span>
+              <p className="text-[16px] italic line-through decoration-[#d05a5a]/50" style={{ color: MUTED, fontFamily: SERIF }}>
+                &ldquo;Looks good, approved!&rdquo;
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="mt-1 text-[13px]" style={{ color: GOLD, fontFamily: MONO }}>✓</span>
+              <p className="text-[18px] text-white" style={{ fontFamily: SERIF }}>
+                &ldquo;I cannot prove path X. Refusing.&rdquo;
+              </p>
+            </div>
           </div>
-          {/* lodestar */}
-          <div className="flex items-start gap-3">
-            <span
-              className="mt-1 text-[13px]"
-              style={{ color: ACCENT, fontFamily: MONO }}
-            >
-              ✓
-            </span>
-            <p
-              className="text-[16px] text-white"
-              style={{ fontFamily: "Georgia, serif" }}
-            >
-              &ldquo;I cannot prove path X. Refusing.&rdquo;
-            </p>
-          </div>
-          <p className="pt-1 text-center text-[12px] italic text-slate-600">
+          <p className="mt-7 border-t pt-5 text-center text-[13px] italic" style={{ borderColor: `${VIOLET}1a`, color: MUTED, fontFamily: SERIF }}>
             An honest &lsquo;unverifiable&rsquo; beats a confident &lsquo;verified.&rsquo;
           </p>
         </div>
       </section>
 
-      {/* ---- quiet stats line ---- */}
-      <section className="relative z-10 flex justify-center px-6 pb-16">
-        <p
-          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-[11px] uppercase tracking-[0.18em] text-slate-500"
-          style={{ fontFamily: MONO }}
-        >
-          <span style={{ color: ACCENT }}>91.9% IMO-ProofBench</span>
-          <span className="text-slate-700">·</span>
-          <span>0% false-positives</span>
-          <span className="text-slate-700">·</span>
-          <span>refuses what it can&apos;t prove</span>
-        </p>
-      </section>
-
-      {/* ============================================================
-          FOOTER — centred, sparse
-      ============================================================ */}
-      <footer className="relative z-10 flex flex-col items-center gap-2 px-6 pb-10 text-center">
-        <div
-          className="text-[11px] uppercase tracking-[0.22em] text-slate-600"
-          style={{ fontFamily: MONO }}
-        >
-          <span style={{ color: ACCENT }}>{appConfig.name}</span>
-          <span className="mx-2 text-slate-700">·</span>
-          <span>Toronto</span>
+      {/* ── FOOTER ── */}
+      <footer className="relative z-10 mx-auto flex max-w-6xl flex-col items-center gap-3 border-t px-6 py-10 text-center sm:flex-row sm:justify-between" style={{ borderColor: "#171b30" }}>
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.22em]" style={{ fontFamily: MONO }}>
+          <span style={{ color: VIOLET_HI }}>{appConfig.name}</span>
+          <span style={{ color: FAINT }}>·</span>
+          <span style={{ color: MUTED }}>Toronto, Canada</span>
         </div>
         <a
           href="https://abduljaleel.xyz/aletheia/"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[11px] tracking-[0.12em] text-slate-500 transition-colors hover:text-white"
-          style={{ fontFamily: MONO }}
+          className="text-[11px] tracking-[0.12em] transition-colors hover:text-white"
+          style={{ color: MUTED, fontFamily: MONO }}
         >
           Part of the Aletheia stack ↗
         </a>
       </footer>
     </main>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   THE ASTROLABE — one responsive viewBox SVG: graduated rotating bezel,
+   declination rings, RA spokes, ecliptic arc, proof-constellation, and the
+   glowing lodestar at the fixed centre.
+   ════════════════════════════════════════════════════════════════════════ */
+function Astrolabe() {
+  const decRings = [78, 140, 200, 252];
+  const ticks = Array.from({ length: 72 }, (_, i) => i); // every 5°
+  const raLabels = [
+    { a: 0, t: "00h" },
+    { a: 90, t: "06h" },
+    { a: 180, t: "12h" },
+    { a: 270, t: "18h" },
+  ];
+
+  return (
+    <div className="relative mx-auto w-full max-w-[540px]">
+      <svg viewBox="0 0 600 600" className="w-full" style={{ display: "block" }} role="img" aria-label="Proof constellation chart">
+        <defs>
+          <radialGradient id="ls-glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={GOLD} stopOpacity="0.9" />
+            <stop offset="35%" stopColor={VIOLET} stopOpacity="0.4" />
+            <stop offset="100%" stopColor={VIOLET} stopOpacity="0" />
+          </radialGradient>
+          <filter id="ls-blur" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3.2" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* faint outer disc */}
+        <circle cx={CX} cy={CY} r="288" fill="#0a0f24" fillOpacity="0.4" stroke={`${VIOLET}1a`} strokeWidth="1" />
+
+        {/* rotating graduated bezel */}
+        <g className="ls-bezel">
+          <circle cx={CX} cy={CY} r="278" fill="none" stroke={`${VIOLET}33`} strokeWidth="1" />
+          <circle cx={CX} cy={CY} r="262" fill="none" stroke={`${VIOLET}1f`} strokeWidth="1" />
+          {ticks.map((i) => {
+            const major = i % 6 === 0;
+            const a = (i * 5 * Math.PI) / 180;
+            const r1 = 278;
+            const r2 = major ? 262 : 270;
+            return (
+              <line
+                key={i}
+                x1={CX + r1 * Math.cos(a)}
+                y1={CY + r1 * Math.sin(a)}
+                x2={CX + r2 * Math.cos(a)}
+                y2={CY + r2 * Math.sin(a)}
+                stroke={major ? VIOLET_HI : VIOLET}
+                strokeOpacity={major ? 0.6 : 0.3}
+                strokeWidth={major ? 1.4 : 0.8}
+              />
+            );
+          })}
+          {raLabels.map(({ a, t }) => {
+            const rad = ((a - 90) * Math.PI) / 180;
+            return (
+              <text
+                key={t}
+                x={CX + 248 * Math.cos(rad)}
+                y={CY + 248 * Math.sin(rad) + 3}
+                textAnchor="middle"
+                fontSize="11"
+                fontFamily={MONO}
+                fill={MUTED}
+              >
+                {t}
+              </text>
+            );
+          })}
+        </g>
+
+        {/* declination rings */}
+        {decRings.map((r) => (
+          <circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke={`${VIOLET}18`} strokeWidth="1" />
+        ))}
+
+        {/* RA spokes */}
+        {Array.from({ length: 12 }, (_, i) => {
+          const a = (i * 30 * Math.PI) / 180;
+          return (
+            <line
+              key={i}
+              x1={CX}
+              y1={CY}
+              x2={CX + 252 * Math.cos(a)}
+              y2={CY + 252 * Math.sin(a)}
+              stroke={`${VIOLET}12`}
+              strokeWidth="1"
+            />
+          );
+        })}
+
+        {/* ecliptic — a tilted ellipse for celestial flavour */}
+        <ellipse cx={CX} cy={CY} rx="240" ry="120" fill="none" stroke={`${GOLD}22`} strokeWidth="1" strokeDasharray="2 6" transform={`rotate(-18 ${CX} ${CY})`} />
+
+        {/* constellation lines from the lodestar to each proven node */}
+        {PROVEN.map((d) => (
+          <line key={`c${d.n}`} x1={CX} y1={CY} x2={d.x} y2={d.y} stroke={VIOLET} strokeOpacity="0.28" strokeWidth="1" />
+        ))}
+        {/* asterism connecting the proven nodes */}
+        <polyline
+          points={PROVEN.map((d) => `${d.x},${d.y}`).join(" ")}
+          fill="none"
+          stroke={VIOLET_HI}
+          strokeOpacity="0.5"
+          strokeWidth="1.4"
+        />
+        {/* the refused path — dashed, dim */}
+        <line
+          x1={CX}
+          y1={CY}
+          x2={NODES[4].x}
+          y2={NODES[4].y}
+          stroke={AMBER}
+          strokeOpacity="0.4"
+          strokeWidth="1"
+          strokeDasharray="3 5"
+        />
+
+        {/* central lodestar */}
+        <circle cx={CX} cy={CY} r="70" fill="url(#ls-glow)" className="ls-core" />
+        <polygon
+          points={starPoints(CX, CY, 116)}
+          fill={VIOLET}
+          fillOpacity="0.22"
+          stroke={VIOLET_HI}
+          strokeWidth="1.2"
+          filter="url(#ls-blur)"
+        />
+        <circle cx={CX} cy={CY} r="7" fill="#fff" />
+        <circle cx={CX} cy={CY} r="13" fill="none" stroke={GOLD} strokeWidth="1.2" strokeOpacity="0.7" />
+
+        {/* constellation nodes */}
+        {NODES.map((d) => {
+          const dim = d.verdict === "unverifiable";
+          return (
+            <g key={d.n}>
+              {dim ? (
+                <circle cx={d.x} cy={d.y} r="6.5" fill="#0a0f24" stroke={AMBER} strokeWidth="1.6" />
+              ) : (
+                <>
+                  <polygon points={sparkle(d.x, d.y, 11)} fill={VIOLET_HI} filter="url(#ls-blur)" />
+                  <circle cx={d.x} cy={d.y} r="3" fill="#fff" />
+                </>
+              )}
+              <text
+                x={d.x + (d.x < CX ? -14 : 14)}
+                y={d.y + 4}
+                textAnchor={d.x < CX ? "end" : "start"}
+                fontSize="13"
+                fontFamily={MONO}
+                fontWeight={700}
+                fill={dim ? AMBER : WHITE}
+              >
+                {d.n}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <p className="mt-3 text-center text-[10px] uppercase tracking-[0.24em]" style={{ color: FAINT, fontFamily: MONO }}>
+        4 proven · 1 refused · centred on the lodestar
+      </p>
+    </div>
+  );
+}
+
+/* ── helpers ── */
+function Stat({ value, label, accent }: { value: string; label: string; accent: string }) {
+  return (
+    <div className="text-center lg:text-left">
+      <div className="text-2xl font-semibold tabular-nums" style={{ color: accent }}>
+        {value}
+      </div>
+      <div className="mt-0.5 text-[10px] uppercase tracking-[0.18em]" style={{ color: MUTED, fontFamily: MONO }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function Rule({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-[11px] uppercase tracking-[0.28em]" style={{ color: VIOLET_HI, fontFamily: MONO }}>
+        {children}
+      </span>
+      <span className="h-px flex-1" style={{ background: `${VIOLET}1f` }} />
+    </div>
+  );
+}
+
+function Step({ glyph, title, body }: { glyph: string; title: string; body: string }) {
+  return (
+    <div className="rounded-xl border p-6" style={{ borderColor: "#1b2038", background: "rgba(12,16,34,0.4)" }}>
+      <div className="text-2xl" style={{ color: GOLD }}>{glyph}</div>
+      <h3 className="mt-3 text-[15px] text-white" style={{ fontFamily: SERIF }}>{title}</h3>
+      <p className="mt-2 text-[13px] leading-relaxed" style={{ color: MUTED }}>{body}</p>
+    </div>
   );
 }
