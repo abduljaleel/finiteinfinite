@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { computeHealth, fetchStrategyData, type SpaceWithData } from "@/lib/data/api";
+import { Target, TrendingUp, Footprints, Clock } from "lucide-react";
 
 interface DiagnosticQuestion {
   id: string;
@@ -26,6 +29,85 @@ const questions: DiagnosticQuestion[] = [
 ];
 
 const dimensions = ["Strategic Clarity", "Game Selection", "Resource Allocation", "Time Horizon", "Decision Quality"];
+
+function LiveSignals() {
+  const [spaces, setSpaces] = useState<SpaceWithData[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStrategyData()
+      .then((data) => {
+        if (!cancelled) setSpaces(data);
+      })
+      .catch((e) => {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Failed to load strategy data");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const health = useMemo(() => computeHealth(spaces ?? []), [spaces]);
+
+  if (loadError) {
+    return <p className="text-sm text-destructive">{loadError}</p>;
+  }
+
+  if (!spaces) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  const signals = [
+    {
+      label: "Strategy Spaces",
+      value: `${health.activeSpaces}/${health.totalSpaces}`,
+      description: "active spaces in play",
+      icon: <Target className="h-4 w-4 text-muted-foreground" />,
+    },
+    {
+      label: "Games",
+      value: `${health.activeGames}/${health.totalGames}`,
+      description: "active games tracked",
+      icon: <TrendingUp className="h-4 w-4 text-muted-foreground" />,
+    },
+    {
+      label: "Moves in Flight",
+      value: `${health.movesInFlight}/${health.totalMoves}`,
+      description: "strategic moves in progress",
+      icon: <Footprints className="h-4 w-4 text-muted-foreground" />,
+    },
+    {
+      label: "Pending Decisions",
+      value: `${health.pendingDecisions}`,
+      description: "awaiting outcome resolution",
+      icon: <Clock className="h-4 w-4 text-muted-foreground" />,
+    },
+  ];
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {signals.map((signal) => (
+        <Card key={signal.label}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{signal.label}</CardTitle>
+            {signal.icon}
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">{signal.value}</div>
+            <p className="text-xs text-muted-foreground">{signal.description}</p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
 
 export default function DiagnosticsPage() {
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -151,6 +233,8 @@ export default function DiagnosticsPage() {
           Assess your strategic clarity, game selection, and decision-making discipline
         </p>
       </div>
+
+      <LiveSignals />
 
       <Card>
         <CardContent className="py-4">

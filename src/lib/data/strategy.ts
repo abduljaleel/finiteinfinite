@@ -60,6 +60,20 @@ export interface StrategySpace {
   decisions: Decision[];
 }
 
+export type MoveStatus = "planned" | "in_progress" | "completed";
+
+export interface StrategicMove {
+  id: string;
+  spaceId: string;
+  gameId: string | null;
+  gameName: string | null;
+  title: string;
+  moveType: string;
+  status: MoveStatus;
+  deadline: string | null; // ISO date
+  outcome: string | null;
+}
+
 export const strategySpaces: StrategySpace[] = [
   {
     id: "sp-1",
@@ -337,6 +351,30 @@ export const strategySpaces: StrategySpace[] = [
       },
     ],
   },
+];
+
+// Demo content for strategic_moves (no scenarios table exists in the product schema).
+// spaceId / gameId reference the seed ids above; deadlineInDays is relative to today.
+export interface DemoMove {
+  spaceId: string;
+  gameId: string | null;
+  title: string;
+  moveType: string;
+  status: MoveStatus;
+  deadlineInDays: number;
+  outcome: string | null;
+}
+
+export const demoMoves: DemoMove[] = [
+  { spaceId: "sp-1", gameId: "g-1", title: "Hire enterprise AE pod", moveType: "build", status: "in_progress", deadlineInDays: 30, outcome: null },
+  { spaceId: "sp-1", gameId: "g-2", title: "Publish public API beta docs", moveType: "launch", status: "planned", deadlineInDays: 45, outcome: null },
+  { spaceId: "sp-1", gameId: "g-3", title: "Run value-based pricing study", moveType: "research", status: "completed", deadlineInDays: -10, outcome: "Confirmed that matching competitor pricing would erode margin ~18% with no measurable retention gain." },
+  { spaceId: "sp-1", gameId: "g-4", title: "Launch executive content series", moveType: "launch", status: "in_progress", deadlineInDays: 21, outcome: null },
+  { spaceId: "sp-2", gameId: "g-5", title: "Stand up dedicated training cluster", moveType: "build", status: "in_progress", deadlineInDays: 60, outcome: null },
+  { spaceId: "sp-2", gameId: "g-5", title: "Define proprietary data flywheel metrics", moveType: "research", status: "planned", deadlineInDays: 35, outcome: null },
+  { spaceId: "sp-2", gameId: "g-7", title: "Sign two university research MOUs", moveType: "partner", status: "planned", deadlineInDays: 90, outcome: null },
+  { spaceId: "sp-3", gameId: "g-8", title: "Incorporate Singapore entity", moveType: "build", status: "in_progress", deadlineInDays: 21, outcome: null },
+  { spaceId: "sp-3", gameId: "g-9", title: "Shortlist five SI partners", moveType: "partner", status: "planned", deadlineInDays: 40, outcome: null },
 ];
 
 export function getAllDecisions(): Decision[] {
