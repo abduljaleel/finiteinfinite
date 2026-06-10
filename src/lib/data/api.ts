@@ -289,7 +289,12 @@ export async function fetchStrategyData(): Promise<SpaceWithData[]> {
   );
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function fetchSpace(id: string): Promise<SpaceWithData | null> {
+  // Non-UUID route params would surface a raw Postgres cast error; treat them
+  // as "not found" so the page renders its existing empty state instead.
+  if (!UUID_RE.test(id)) return null;
   const ctx = await getCtx();
   const { supabase } = ctx;
   const spaceQ = await supabase.from("strategy_spaces").select("*").eq("id", id).maybeSingle();
@@ -329,12 +334,13 @@ export async function createSpace(input: {
 }): Promise<SpaceWithData> {
   const ctx = await getCtx();
   const { supabase, orgId, userId } = ctx;
+  const allowedHorizons = ["1yr", "3yr", "5yr", "10yr"];
   const { data, error } = await supabase
     .from("strategy_spaces")
     .insert({
       org_id: orgId,
       name: input.name,
-      time_horizon: input.timeHorizon || "3yr",
+      time_horizon: allowedHorizons.includes(input.timeHorizon) ? input.timeHorizon : "3yr",
       status: "active",
       owner_id: userId,
       thesis: input.description || null,
@@ -347,9 +353,21 @@ export async function createSpace(input: {
 
 export async function createGame(
   spaceId: string,
-  input: { name: string; description: string; type: GameType; stakes: StakesLevel }
+  input: {
+    name: string;
+    description: string;
+    type: GameType;
+    stakes: StakesLevel;
+    scores?: Partial<GameScores>;
+  }
 ): Promise<Game> {
   const { supabase } = await getCtx();
+  const scores: GameScores = {
+    asymmetry: clampScore(input.scores?.asymmetry ?? DEFAULT_SCORES.asymmetry),
+    competitiveAdvantage: clampScore(input.scores?.competitiveAdvantage ?? DEFAULT_SCORES.competitiveAdvantage),
+    timeHorizon: clampScore(input.scores?.timeHorizon ?? DEFAULT_SCORES.timeHorizon),
+    reversibility: clampScore(input.scores?.reversibility ?? DEFAULT_SCORES.reversibility),
+  };
   const { data, error } = await supabase
     .from("games")
     .insert({
@@ -359,7 +377,7 @@ export async function createGame(
       stakes: input.stakes,
       status: "active",
       rationale: input.description || null,
-      market: encodeScores({ ...DEFAULT_SCORES }),
+      market: encodeScores(scores),
     })
     .select("*")
     .single();
@@ -390,10 +408,43 @@ export async function createMove(
   return mapMove(data as MoveRow, new Map());
 }
 
+export async function updateMove(
+  id: string,
+  input: { status?: MoveStatus; outcome?: string | null }
+): Promise<void> {
+  const { supabase } = await getCtx();
+  const patch: Record<string, unknown> = {};
+  if (input.status !== undefined) patch.status = input.status;
+  if (input.outcome !== undefined) patch.outcome = input.outcome;
+  const { error } = await supabase.from("strategic_moves").update(patch).eq("id", id);
+  throwIfError(error, "Failed to update move");
+}
+
 export async function updatePortfolioItemCategory(id: string, category: PortfolioCategory): Promise<void> {
   const { supabase } = await getCtx();
   const { error } = await supabase.from("portfolio_items").update({ category }).eq("id", id);
   throwIfError(error, "Failed to update portfolio item");
+}
+
+export async function createPortfolioItem(
+  spaceId: string,
+  input: { name: string; category: PortfolioCategory; allocation: number; confidence: number }
+): Promise<PortfolioItem> {
+  const { supabase } = await getCtx();
+  const clampPct = (n: number) => Math.min(100, Math.max(0, Math.round(Number.isFinite(n) ? n : 0)));
+  const { data, error } = await supabase
+    .from("portfolio_items")
+    .insert({
+      strategy_space_id: spaceId,
+      name: input.name,
+      category: input.category,
+      allocation_pct: clampPct(input.allocation),
+      confidence: clampPct(input.confidence),
+    })
+    .select("*")
+    .single();
+  throwIfError(error, "Failed to add portfolio item");
+  return mapPortfolioItem(data as PortfolioRow);
 }
 
 export async function createDecision(input: {

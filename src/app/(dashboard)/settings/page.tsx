@@ -12,7 +12,7 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -29,17 +29,36 @@ export default function SettingsPage() {
   async function handleUpdateProfile(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setMessage("");
+    setMessage(null);
 
     const { error } = await supabase.auth.updateUser({
       data: { full_name: fullName },
     });
 
     if (error) {
-      setMessage(error.message);
-    } else {
-      setMessage("Profile updated successfully");
+      setMessage({ type: "error", text: error.message });
+      setLoading(false);
+      return;
     }
+
+    // Also persist to the profiles table — the data layer reads full_name
+    // from profiles to label space ownership across the app.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName })
+        .eq("id", user.id);
+      if (profileError) {
+        setMessage({ type: "error", text: profileError.message });
+        setLoading(false);
+        return;
+      }
+    }
+
+    setMessage({ type: "success", text: "Profile updated successfully" });
     setLoading(false);
   }
 
@@ -58,7 +77,15 @@ export default function SettingsPage() {
         <CardContent>
           <form onSubmit={handleUpdateProfile} className="space-y-4 max-w-md">
             {message && (
-              <div className="rounded-md bg-muted p-3 text-sm">{message}</div>
+              <div
+                className={
+                  message.type === "success"
+                    ? "rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-600 dark:text-emerald-400"
+                    : "rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                }
+              >
+                {message.text}
+              </div>
             )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>

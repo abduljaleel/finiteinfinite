@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { computeHealth, fetchStrategyData, type SpaceWithData } from "@/lib/data/api";
+import { createClient } from "@/lib/supabase/client";
 import { Target, TrendingUp, Footprints, Clock } from "lucide-react";
 
 interface DiagnosticQuestion {
@@ -112,6 +113,69 @@ function LiveSignals() {
 export default function DiagnosticsPage() {
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState(false);
+  // Persist the assessment to localStorage (keyed by user id) so a completed
+  // or in-progress diagnostic survives navigation.
+  const [storageKey, setStorageKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function hydrate() {
+      let key = "lodestar:diagnostic:anon";
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) key = `lodestar:diagnostic:${user.id}`;
+      } catch {
+        // fall back to the anonymous key
+      }
+      if (cancelled) return;
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { answers?: Record<string, unknown>; submitted?: unknown } | null;
+          if (parsed && typeof parsed === "object") {
+            const restored: Record<string, number> = {};
+            for (const q of questions) {
+              const v = parsed.answers?.[q.id];
+              if (typeof v === "number" && v >= 1 && v <= 5) restored[q.id] = v;
+            }
+            setAnswers(restored);
+            setSubmitted(parsed.submitted === true && questions.every((q) => restored[q.id] !== undefined));
+          }
+        }
+      } catch {
+        // ignore corrupted storage
+      }
+      setStorageKey(key);
+    }
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify({ answers, submitted }));
+    } catch {
+      // storage unavailable (private mode, quota) — assessment stays in memory
+    }
+  }, [answers, submitted, storageKey]);
+
+  const handleRetake = () => {
+    setSubmitted(false);
+    setAnswers({});
+    if (storageKey) {
+      try {
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        // ignore
+      }
+    }
+  };
 
   const allAnswered = questions.every((q) => answers[q.id] !== undefined);
 
@@ -217,7 +281,7 @@ export default function DiagnosticsPage() {
         </div>
 
         <div className="flex justify-center">
-          <Button variant="outline" onClick={() => { setSubmitted(false); setAnswers({}); }}>
+          <Button variant="outline" onClick={handleRetake}>
             Retake Assessment
           </Button>
         </div>

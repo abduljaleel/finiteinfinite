@@ -4,11 +4,13 @@ import { use, useCallback, useEffect, useState } from "react";
 import {
   createGame,
   createMove,
+  createPortfolioItem,
   fetchSpace,
+  updateMove,
   updatePortfolioItemCategory,
   type SpaceWithData,
 } from "@/lib/data/api";
-import type { Game, PortfolioItem, PortfolioCategory, Decision, StrategicMove, MoveStatus } from "@/lib/data/strategy";
+import type { Game, GameType, StakesLevel, PortfolioItem, PortfolioCategory, Decision, StrategicMove, MoveStatus } from "@/lib/data/strategy";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +36,21 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Plus, ArrowRight, Infinity, Square, LoaderCircle, CalendarClock } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowLeft, Plus, ArrowRight, Infinity, Square, LoaderCircle, CalendarClock, Ellipsis } from "lucide-react";
 import Link from "next/link";
 
 function ScoreBar({ value, max = 10 }: { value: number; max?: number }) {
@@ -77,12 +93,31 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
 }
 
 // --- Games Tab ---
+const GAME_TYPE_OPTIONS: { value: GameType; label: string }[] = [
+  { value: "finite", label: "finite" },
+  { value: "infinite", label: "infinite" },
+];
+const STAKES_OPTIONS: { value: StakesLevel; label: string }[] = [
+  { value: "low", label: "low" },
+  { value: "medium", label: "medium" },
+  { value: "high", label: "high" },
+  { value: "critical", label: "critical" },
+];
+const SCORE_FIELDS: { key: "asymmetry" | "competitiveAdvantage" | "timeHorizon" | "reversibility"; label: string }[] = [
+  { key: "asymmetry", label: "Asymmetry" },
+  { key: "competitiveAdvantage", label: "Advantage" },
+  { key: "timeHorizon", label: "Horizon" },
+  { key: "reversibility", label: "Reversibility" },
+];
+const DEFAULT_SCORE_INPUTS = { asymmetry: "5", competitiveAdvantage: "5", timeHorizon: "5", reversibility: "5" };
+
 function GamesTab({ spaceId, games, onCreated }: { spaceId: string; games: Game[]; onCreated: (game: Game) => void }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [type, setType] = useState("");
-  const [stakes, setStakes] = useState("");
+  const [type, setType] = useState<GameType>("finite");
+  const [stakes, setStakes] = useState<StakesLevel>("medium");
+  const [scoreInputs, setScoreInputs] = useState({ ...DEFAULT_SCORE_INPUTS });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -91,25 +126,31 @@ function GamesTab({ spaceId, games, onCreated }: { spaceId: string; games: Game[
       setSaveError("Game name is required.");
       return;
     }
+    const parsedScores: Record<string, number> = {};
+    for (const field of SCORE_FIELDS) {
+      const n = Number(scoreInputs[field.key]);
+      if (!Number.isFinite(n) || n < 1 || n > 10) {
+        setSaveError(`${field.label} must be a number between 1 and 10.`);
+        return;
+      }
+      parsedScores[field.key] = Math.round(n);
+    }
     setSaving(true);
     setSaveError(null);
     try {
-      const normalizedType = type.trim().toLowerCase() === "infinite" ? "infinite" : "finite";
-      const stakesInput = stakes.trim().toLowerCase();
-      const normalizedStakes = ["low", "medium", "high", "critical"].includes(stakesInput)
-        ? (stakesInput as Game["stakes"])
-        : "medium";
       const game = await createGame(spaceId, {
         name: name.trim(),
         description: description.trim(),
-        type: normalizedType,
-        stakes: normalizedStakes,
+        type,
+        stakes,
+        scores: parsedScores,
       });
       onCreated(game);
       setName("");
       setDescription("");
-      setType("");
-      setStakes("");
+      setType("finite");
+      setStakes("medium");
+      setScoreInputs({ ...DEFAULT_SCORE_INPUTS });
       setDialogOpen(false);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Failed to add game");
@@ -147,11 +188,64 @@ function GamesTab({ spaceId, games, onCreated }: { spaceId: string; games: Game[
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="game-type">Type</Label>
-                  <Input id="game-type" placeholder="finite / infinite" value={type} onChange={(e) => setType(e.target.value)} />
+                  <Select
+                    items={GAME_TYPE_OPTIONS}
+                    value={type}
+                    onValueChange={(value) => setType((value ?? "finite") as GameType)}
+                  >
+                    <SelectTrigger id="game-type" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GAME_TYPE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="game-stakes">Stakes</Label>
-                  <Input id="game-stakes" placeholder="low / medium / high / critical" value={stakes} onChange={(e) => setStakes(e.target.value)} />
+                  <Select
+                    items={STAKES_OPTIONS}
+                    value={stakes}
+                    onValueChange={(value) => setStakes((value ?? "medium") as StakesLevel)}
+                  >
+                    <SelectTrigger id="game-stakes" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STAKES_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Evaluation scores (1-10)</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {SCORE_FIELDS.map((field) => (
+                    <div key={field.key} className="space-y-1">
+                      <Label htmlFor={`game-score-${field.key}`} className="text-xs font-normal text-muted-foreground">
+                        {field.label}
+                      </Label>
+                      <Input
+                        id={`game-score-${field.key}`}
+                        type="number"
+                        min={1}
+                        max={10}
+                        step={1}
+                        value={scoreInputs[field.key]}
+                        onChange={(e) =>
+                          setScoreInputs((prev) => ({ ...prev, [field.key]: e.target.value }))
+                        }
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
               {saveError && <p className="text-sm text-destructive">{saveError}</p>}
@@ -230,9 +324,33 @@ function GamesTab({ spaceId, games, onCreated }: { spaceId: string; games: Game[
 }
 
 // --- Portfolio Tab ---
-function PortfolioTab({ portfolio: initialPortfolio }: { portfolio: PortfolioItem[] }) {
-  const [portfolio, setPortfolio] = useState(initialPortfolio);
+const PORTFOLIO_CATEGORY_OPTIONS: { value: PortfolioCategory; label: string }[] = [
+  { value: "invest", label: "Invest" },
+  { value: "maintain", label: "Maintain" },
+  { value: "harvest", label: "Harvest" },
+  { value: "divest", label: "Divest" },
+];
+
+function PortfolioTab({
+  spaceId,
+  portfolio,
+  onCategoryChanged,
+  onCreated,
+}: {
+  spaceId: string;
+  portfolio: PortfolioItem[];
+  onCategoryChanged: (itemId: string, category: PortfolioCategory) => void;
+  onCreated: (item: PortfolioItem) => void;
+}) {
   const [moveError, setMoveError] = useState<string | null>(null);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState<PortfolioCategory>("invest");
+  const [allocation, setAllocation] = useState("10");
+  const [confidence, setConfidence] = useState("50");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const categories: { key: PortfolioCategory; label: string; color: string }[] = [
     { key: "invest", label: "Invest", color: "border-emerald-500/50 bg-emerald-50/50 dark:bg-emerald-950/20" },
@@ -250,20 +368,129 @@ function PortfolioTab({ portfolio: initialPortfolio }: { portfolio: PortfolioIte
     const newCategory = catOrder[newIdx];
     if (newCategory === item.category) return;
 
-    const previous = portfolio;
+    const previousCategory = item.category;
     setMoveError(null);
-    setPortfolio((prev) => prev.map((p) => (p.id === itemId ? { ...p, category: newCategory } : p)));
+    onCategoryChanged(itemId, newCategory);
     void updatePortfolioItemCategory(itemId, newCategory).catch((e) => {
-      setPortfolio(previous);
+      onCategoryChanged(itemId, previousCategory);
       setMoveError(e instanceof Error ? e.message : "Failed to update portfolio item");
     });
   };
 
+  const handleAdd = async () => {
+    if (!name.trim()) {
+      setSaveError("Item name is required.");
+      return;
+    }
+    const allocationNum = Number(allocation);
+    const confidenceNum = Number(confidence);
+    if (!Number.isFinite(allocationNum) || allocationNum < 0 || allocationNum > 100) {
+      setSaveError("Allocation must be a number between 0 and 100.");
+      return;
+    }
+    if (!Number.isFinite(confidenceNum) || confidenceNum < 0 || confidenceNum > 100) {
+      setSaveError("Confidence must be a number between 0 and 100.");
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const item = await createPortfolioItem(spaceId, {
+        name: name.trim(),
+        category,
+        allocation: allocationNum,
+        confidence: confidenceNum,
+      });
+      onCreated(item);
+      setName("");
+      setCategory("invest");
+      setAllocation("10");
+      setConfidence("50");
+      setDialogOpen(false);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Failed to add portfolio item");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="font-semibold">Portfolio Allocation</h3>
-        <p className="text-sm text-muted-foreground">Categorize and allocate across strategic initiatives</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold">Portfolio Allocation</h3>
+          <p className="text-sm text-muted-foreground">Categorize and allocate across strategic initiatives</p>
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger render={<Button size="sm" />}>
+            <Plus className="h-3 w-3 mr-1" />
+            Add Item
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Portfolio Item</DialogTitle>
+              <DialogDescription>Add a strategic initiative to allocate and track confidence against.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="portfolio-name">Item name</Label>
+                <Input id="portfolio-name" placeholder="e.g., Enterprise tier" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="portfolio-category">Category</Label>
+                <Select
+                  items={PORTFOLIO_CATEGORY_OPTIONS}
+                  value={category}
+                  onValueChange={(value) => setCategory((value ?? "invest") as PortfolioCategory)}
+                >
+                  <SelectTrigger id="portfolio-category" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PORTFOLIO_CATEGORY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="portfolio-allocation">Allocation %</Label>
+                  <Input
+                    id="portfolio-allocation"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={allocation}
+                    onChange={(e) => setAllocation(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="portfolio-confidence">Confidence %</Label>
+                  <Input
+                    id="portfolio-confidence"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={confidence}
+                    onChange={(e) => setConfidence(e.target.value)}
+                  />
+                </div>
+              </div>
+              {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => void handleAdd()} disabled={saving}>
+                {saving && <LoaderCircle className="h-3 w-3 mr-1 animate-spin" />}
+                {saving ? "Adding..." : "Add item"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {moveError && <p className="text-sm text-destructive">{moveError}</p>}
@@ -325,18 +552,42 @@ function PortfolioTab({ portfolio: initialPortfolio }: { portfolio: PortfolioIte
 }
 
 // --- Moves Tab ---
-function MovesTab({ spaceId, moves, onCreated }: { spaceId: string; moves: StrategicMove[]; onCreated: (move: StrategicMove) => void }) {
+const MOVE_STATUSES: MoveStatus[] = ["planned", "in_progress", "completed"];
+
+function MovesTab({
+  spaceId,
+  moves,
+  onCreated,
+  onStatusChanged,
+}: {
+  spaceId: string;
+  moves: StrategicMove[];
+  onCreated: (move: StrategicMove) => void;
+  onStatusChanged: (moveId: string, status: MoveStatus) => void;
+}) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [moveType, setMoveType] = useState("");
   const [deadline, setDeadline] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const statusVariant: Record<string, "default" | "secondary" | "outline"> = {
     in_progress: "default",
     planned: "outline",
     completed: "secondary",
+  };
+
+  const handleStatusChange = (move: StrategicMove, status: MoveStatus) => {
+    if (move.status === status) return;
+    const previousStatus = move.status;
+    setStatusError(null);
+    onStatusChanged(move.id, status);
+    void updateMove(move.id, { status }).catch((e) => {
+      onStatusChanged(move.id, previousStatus);
+      setStatusError(e instanceof Error ? e.message : "Failed to update move status");
+    });
   };
 
   const handleAdd = async () => {
@@ -409,6 +660,8 @@ function MovesTab({ spaceId, moves, onCreated }: { spaceId: string; moves: Strat
         </Dialog>
       </div>
 
+      {statusError && <p className="text-sm text-destructive">{statusError}</p>}
+
       {moves.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
@@ -422,9 +675,29 @@ function MovesTab({ spaceId, moves, onCreated }: { spaceId: string; moves: Strat
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base">{move.title}</CardTitle>
-                  <Badge variant={statusVariant[move.status] || "outline"} className="text-[10px] shrink-0">
-                    {move.status.replace("_", " ")}
-                  </Badge>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Badge variant={statusVariant[move.status] || "outline"} className="text-[10px]">
+                      {move.status.replace("_", " ")}
+                    </Badge>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                        <Ellipsis className="h-4 w-4" />
+                        <span className="sr-only">Move actions</span>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Set status</DropdownMenuLabel>
+                        {MOVE_STATUSES.map((status) => (
+                          <DropdownMenuItem
+                            key={status}
+                            disabled={move.status === status}
+                            onClick={() => handleStatusChange(move, status)}
+                          >
+                            {status.replace("_", " ")}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {move.moveType}
@@ -537,6 +810,26 @@ export default function SpaceDetailPage({ params }: { params: Promise<{ id: stri
     setSpace((prev) => (prev ? { ...prev, moves: [...prev.moves, move] } : prev));
   };
 
+  const handleMoveStatusChanged = (moveId: string, status: MoveStatus) => {
+    setSpace((prev) =>
+      prev
+        ? { ...prev, moves: prev.moves.map((m) => (m.id === moveId ? { ...m, status } : m)) }
+        : prev
+    );
+  };
+
+  const handlePortfolioItemCreated = (item: PortfolioItem) => {
+    setSpace((prev) => (prev ? { ...prev, portfolio: [...prev.portfolio, item] } : prev));
+  };
+
+  const handlePortfolioCategoryChanged = (itemId: string, category: PortfolioCategory) => {
+    setSpace((prev) =>
+      prev
+        ? { ...prev, portfolio: prev.portfolio.map((p) => (p.id === itemId ? { ...p, category } : p)) }
+        : prev
+    );
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -616,10 +909,20 @@ export default function SpaceDetailPage({ params }: { params: Promise<{ id: stri
           <GamesTab spaceId={space.id} games={space.games} onCreated={handleGameCreated} />
         </TabsContent>
         <TabsContent value="portfolio" className="mt-4">
-          <PortfolioTab key={space.portfolio.map((p) => p.id).join(",")} portfolio={space.portfolio} />
+          <PortfolioTab
+            spaceId={space.id}
+            portfolio={space.portfolio}
+            onCategoryChanged={handlePortfolioCategoryChanged}
+            onCreated={handlePortfolioItemCreated}
+          />
         </TabsContent>
         <TabsContent value="moves" className="mt-4">
-          <MovesTab spaceId={space.id} moves={space.moves} onCreated={handleMoveCreated} />
+          <MovesTab
+            spaceId={space.id}
+            moves={space.moves}
+            onCreated={handleMoveCreated}
+            onStatusChanged={handleMoveStatusChanged}
+          />
         </TabsContent>
         <TabsContent value="log" className="mt-4">
           <LogTab decisions={space.decisions} />

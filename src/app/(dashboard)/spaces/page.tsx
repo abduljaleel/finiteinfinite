@@ -20,6 +20,20 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const horizonOptions = [
+  { value: "1yr", label: "1 year" },
+  { value: "3yr", label: "3 years" },
+  { value: "5yr", label: "5 years" },
+  { value: "10yr", label: "10 years" },
+];
 
 const horizonColors: Record<string, string> = {
   "1yr": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
@@ -35,7 +49,7 @@ export default function SpacesPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState("");
-  const [horizon, setHorizon] = useState("");
+  const [horizon, setHorizon] = useState("3yr");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -66,12 +80,12 @@ export default function SpacesPage() {
     try {
       const space = await createSpace({
         name: name.trim(),
-        timeHorizon: horizon.trim() || "3yr",
+        timeHorizon: horizon || "3yr",
         description: description.trim(),
       });
       setSpaces((prev) => [...prev, space]);
       setName("");
-      setHorizon("");
+      setHorizon("3yr");
       setDescription("");
       setDialogOpen(false);
     } catch (e) {
@@ -109,7 +123,18 @@ export default function SpacesPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="space-horizon">Time horizon</Label>
-                <Input id="space-horizon" placeholder="e.g., 3yr" value={horizon} onChange={(e) => setHorizon(e.target.value)} />
+                <Select items={horizonOptions} value={horizon} onValueChange={(value) => setHorizon(value ?? "3yr")}>
+                  <SelectTrigger id="space-horizon" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {horizonOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="space-desc">Description</Label>
